@@ -14,6 +14,11 @@ type TypeName = T.Text
 type Name = T.Text
 type ClassName = T.Text
 
+data FunctionPragma
+  = PInline
+  | PNoInline
+  deriving Show
+
 data Module = Module
   { modName    :: ModuleName
   , modPragmas :: [Pragma]
@@ -44,6 +49,7 @@ data Decl
   | DataDecl TypeName [ConDecl] [Deriving]
   | InstDecl InstHead [Decl]
   | FunBind [Match]
+  | PragmaFunBind [FunctionPragma] [Match]
   | TypeSigDecl Name Type
   deriving (Show)
 
@@ -144,7 +150,16 @@ instance Pretty Decl where
       ) <> line
     InstDecl h decls -> (nest 2 $ vsep $ [ pretty h ] ++ map pretty decls) <> line
     FunBind ms -> vsep (map pretty ms) <> line
+    PragmaFunBind pragmas ms@(Match name _ _ : _) -> vsep (map pretty ms ++ prettyFunctionPragmas name pragmas) <> line
+    PragmaFunBind _ _ -> mempty
     TypeSigDecl n ty -> pretty n <+> "::" <+> pretty ty
+
+prettyFunctionPragmas :: Name -> [FunctionPragma] -> [Doc a]
+prettyFunctionPragmas name pragmas = map prettyFunctionPragma pragmas
+  where
+    prettyFunctionPragma :: FunctionPragma -> Doc a
+    prettyFunctionPragma PInline = "{-# INLINE " <+> pretty name <+> "#-}"
+    prettyFunctionPragma PNoInline = "{-# INLINE " <+> pretty name <+> "#-}"
 
 prettyDerivings :: [Deriving] -> Doc a
 prettyDerivings [] = ""
