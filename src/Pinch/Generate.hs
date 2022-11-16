@@ -358,7 +358,7 @@ structDatatype nm fs = do
     [ H.DataDecl nm
       [ H.RecConDecl nm (zip nms tys)
       ]
-      [ derivingEq, derivingGenerics, derivingShow ]
+      [ derivingEq, derivingShow ]
     , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
     , H.InstDecl (H.InstHead [] clHashable (H.TyCon nm))
         [ H.FunBind
@@ -430,7 +430,7 @@ unionDatatype nm fs defCon = do
   pure $
     [ H.DataDecl nm
       cons
-      [ derivingEq, derivingGenerics, derivingShow ]
+      [ derivingEq, derivingShow ]
       , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
     , H.InstDecl (H.InstHead [] clHashable (H.TyCon nm))
         (fmap (\(n, fname, _, _) -> H.FunBind
