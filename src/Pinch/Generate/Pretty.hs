@@ -159,7 +159,7 @@ prettyFunctionPragmas name pragmas = map prettyFunctionPragma pragmas
   where
     prettyFunctionPragma :: FunctionPragma -> Doc a
     prettyFunctionPragma PInline = "{-# INLINE " <+> pretty name <+> "#-}"
-    prettyFunctionPragma PNoInline = "{-# INLINE " <+> pretty name <+> "#-}"
+    prettyFunctionPragma PNoInline = "{-# NOINLINE " <+> pretty name <+> "#-}"
 
 prettyDerivings :: [Deriving] -> Doc a
 prettyDerivings [] = ""
