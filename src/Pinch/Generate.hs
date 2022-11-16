@@ -267,7 +267,7 @@ gEnum e = do
           [ H.Match "hashWithSalt" [H.PVar "s", H.PVar "x"] 
             $ H.EApp (H.EVar "hashWithSalt")
               [ H.EVar "s"
-              , H.EApp (H.EVar "fromEnum") [ H.EVar "x" ]
+              , H.EApp (H.EVar "Prelude.fromEnum") [ H.EVar "x" ]
               ]
           ]
         ]
