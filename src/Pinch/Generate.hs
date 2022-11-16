@@ -279,7 +279,7 @@ gEnum e = do
       H.InstDecl (H.InstHead [] clNFData (H.TyCon tyName)) [
         H.FunBind
           $ fmap (\con -> 
-            H.Match "rnf" [H.PVar "s", H.PCon (enumDefName con) []]  $ H.ELit H.LUnit
+            H.Match "rnf" [H.PCon (enumDefName con) []]  $ H.ELit H.LUnit
             ) (enumValues e)
       ]
     ] else []))
@@ -386,7 +386,7 @@ structDatatype nm fs = do
       ++ (if sGenerateNFData settings then [
       H.InstDecl (H.InstHead [] clNFData (H.TyCon nm)) [
         H.FunBind
-          [ H.Match "rnf" [H.PVar "s", (H.PCon nm $ H.PVar <$> fieldParams)] 
+          [ H.Match "rnf" [(H.PCon nm $ H.PVar <$> fieldParams)] 
             $ foldl' (\acc fieldParam -> H.EApp (H.EVar "deepseq") [H.EVar fieldParam, acc]) (H.ELit H.LUnit) fieldParams
           ]
       ]
@@ -474,7 +474,7 @@ unionDatatype nm fs defCon = do
       H.InstDecl (H.InstHead [] clNFData (H.TyCon nm)) [
         H.FunBind
           $ fmap (\(_, fname, _, _) -> 
-            H.Match "rnf" [H.PVar "s", H.PCon fname [H.PVar "x"]] 
+            H.Match "rnf" [H.PCon fname [H.PVar "x"]] 
               $ H.EApp (H.EVar "rnf")
                 [ H.EVar "s"
                 , H.EApp (H.EVar "rnf")
