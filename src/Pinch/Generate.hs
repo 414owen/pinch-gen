@@ -110,8 +110,10 @@ gProgram s inp (Program headers defs) = do
       mkMod ".Types"
       (imports ++ defaultImports ++ map
         (\n -> H.ImportDecl (H.ModuleName n) True H.IEverything)
-        (sExtraImports s ++ (if sGenerateArbitrary s then [ "Test.QuickCheck" ] else [])
-                         ++ (if sGenerateNFData s then [ "Control.DeepSeq" ] else []))
+        (sExtraImports s ++ (if sGenerateArbitrary s then [ "Test.QuickCheck" ] else []))
+        ++ [ H.ImportDecl (H.ModuleName "Control.DeepSeq") False $ H.IJust
+            [ "NFData", "deepseq", "rnf"]
+           | sGenerateNFData s]
       )
       (concat typeDecls)
     , -- client
@@ -610,7 +612,7 @@ clPinchable = "Pinch.Pinchable"
 clHashable = "Hashable"
 clException = "Control.Exception.Exception"
 clArbitrary = "Test.QuickCheck.Arbitrary"
-clNFData = "Control.DeepSeq.NFData"
+clNFData = "NFData"
 
 decapitalize :: T.Text -> T.Text
 decapitalize s = if T.null s then "" else T.singleton (toLower $ T.head s) <> T.tail s
