@@ -311,10 +311,9 @@ gStruct :: Struct SourcePos -> GenerateM [H.Decl]
 gStruct s = case structKind s of
   UnionKind -> unionDatatype tyName (structFields s) SRCNone
   StructKind -> structDatatype tyName (structFields s)
-  ExceptionKind -> structDatatype tyName (structFields s)
+  ExceptionKind -> (ex :) <$> structDatatype tyName (structFields s)
   where
     tyName = structName s
-    fields = structFields s
     ex = H.InstDecl (H.InstHead [] clException (H.TyCon tyName)) []
 
 structDatatype :: T.Text -> [Field SourcePos] -> GenerateM [H.Decl]
