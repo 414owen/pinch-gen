@@ -97,7 +97,7 @@ saltHash :: [H.Decl]
 saltHash = [sig, fn]
   where
     sig = H.TypeSigDecl "saltHash" [H.CClass "Hashable" $ H.TyCon "a"] $
-      H.TyLam [H.TyCon "Int", H.TyCon "a"] $ H.TyCon "Int"
+      H.TyLam [H.TyCon "Prelude.Int", H.TyCon "a"] $ H.TyCon "Prelude.Int"
     fn = H.PragmaFunBind [H.PNoInline]
       [ H.Match "saltHash" []  (H.EVar "hashWithSalt")
       ]
