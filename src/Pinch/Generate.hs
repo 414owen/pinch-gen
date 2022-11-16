@@ -264,7 +264,7 @@ gEnum e = do
       , H.FunBind (toEnum' ++ [toEnumDef])
       ]
     , H.InstDecl (H.InstHead [] clHashable (H.TyCon tyName))
-        [ H.FunBind
+        [ H.PragmaFunBind [H.PNoInline]
           [ H.Match "hashWithSalt" [H.PVar "s", H.PVar "x"] 
             $ H.EApp (H.EVar "hashWithSalt")
               [ H.EVar "s"
