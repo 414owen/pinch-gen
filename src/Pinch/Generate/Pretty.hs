@@ -153,7 +153,7 @@ instance Pretty Decl where
     PragmaFunBind pragmas ms@(Match name _ _ : _) -> vsep (map pretty ms ++ prettyFunctionPragmas name pragmas) <> line
     PragmaFunBind _ _ -> mempty
     -- TODO
-    TypeSigDecl n constraints ty -> pretty n <+> "::" <+> pretty ty
+    TypeSigDecl n cs ty -> pretty n <+> "::" <+> prettyConstraints cs <+> pretty ty
 
 prettyFunctionPragmas :: Name -> [FunctionPragma] -> [Doc a]
 prettyFunctionPragmas name pragmas = map prettyFunctionPragma pragmas
@@ -166,6 +166,11 @@ prettyDerivings :: [Deriving] -> Doc a
 prettyDerivings [] = ""
 prettyDerivings ds = "deriving" <+> (parens $ cList $ map pretty ds)
 
+prettyConstraints :: [Constraint] -> Doc a
+prettyConstraints [] = mempty
+prettyConstraints [a] = pretty a <+> "=>"
+prettyConstraints cs = cList (map pretty cs)  <+> "=>"
+
 instance Pretty Deriving where
   pretty (DeriveClass c) = pretty c
 
@@ -176,7 +181,7 @@ instance Pretty ConDecl where
 
 instance Pretty InstHead where
   pretty (InstHead cs n ty) = "instance" <> context <+> pretty n <+> pretty ty <+> "where"
-    where context = if null cs then "" else space <> parens (cList $ map pretty cs) <+> "=>" <+> pretty n <+> pretty ty <+> "where"
+    where context = prettyConstraints cs <+> pretty n <+> pretty ty <+> "where"
 
 instance Pretty Constraint where
   pretty (CClass cl n) = pretty cl <+> pretty n
