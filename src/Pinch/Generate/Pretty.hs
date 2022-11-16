@@ -181,7 +181,7 @@ instance Pretty ConDecl where
 
 instance Pretty InstHead where
   pretty (InstHead cs n ty) = "instance" <> context <+> pretty n <+> pretty ty <+> "where"
-    where context = prettyConstraints cs <+> pretty n <+> pretty ty <+> "where"
+    where context = prettyConstraints cs
 
 instance Pretty Constraint where
   pretty (CClass cl n) = pretty cl <+> pretty n
