@@ -93,7 +93,10 @@ loadFile inp = do
 parseFromFile' :: FilePath -> IO (Either (E.ParseErrorBundle T.Text Void) (Program SourcePos))
 parseFromFile' path = P.runParser thriftIDL path . decodeUtf8 <$> BS.readFile path
 
-
+saltHash :: H.Decl
+saltHash = H.PragmaFunBind [H.PNoInline]
+  [ H.Match "saltHash" []  (H.EVar "hashWithSalt")
+  ]
 
 gProgram :: Settings -> FilePath -> Program SourcePos -> IO [H.Module]
 gProgram s inp (Program headers defs) = do
@@ -114,7 +117,7 @@ gProgram s inp (Program headers defs) = do
             [ "NFData", "deepseq", "rnf"]
            | sGenerateNFData s]
       )
-      (concat typeDecls)
+      (saltHash : concat typeDecls)
     , -- client
       mkMod ".Client"
       ( [ impTypes
@@ -266,7 +269,7 @@ gEnum e = do
     , H.InstDecl (H.InstHead [] clHashable (H.TyCon tyName))
         [ H.PragmaFunBind [H.PNoInline]
           [ H.Match "hashWithSalt" [H.PVar "s", H.PVar "x"] 
-            $ H.EApp (H.EVar "hashWithSalt")
+            $ H.EApp (H.EVar "saltHash")
               [ H.EVar "s"
               , H.EApp (H.EVar "Prelude.fromEnum") [ H.EVar "x" ]
               ]
@@ -379,7 +382,7 @@ structDatatype nm fs = do
     , H.InstDecl (H.InstHead [] clHashable (H.TyCon nm))
         [ H.PragmaFunBind [H.PNoInline]
           [ H.Match "hashWithSalt" [H.PVar "s", (H.PCon nm $ H.PVar <$> fieldParams)] 
-            $ foldl' (\acc fieldParam -> H.EApp (H.EVar "hashWithSalt") [acc, H.EVar fieldParam]) (H.EVar "s") fieldParams
+            $ foldl' (\acc fieldParam -> H.EApp (H.EVar "saltHash") [acc, H.EVar fieldParam]) (H.EVar "s") fieldParams
           ]
         ]
     ] ++ (if sGenerateArbitrary settings then [
@@ -457,9 +460,9 @@ unionDatatype nm fs defCon = do
         [ H.PragmaFunBind [H.PNoInline]
           $ fmap (\(n, fname, _, _) -> 
             H.Match "hashWithSalt" [H.PVar "s", H.PCon fname [H.PVar "x"]] 
-              $ H.EApp (H.EVar "hashWithSalt")
+              $ H.EApp (H.EVar "saltHash")
                 [ H.EVar "s"
-                , H.EApp (H.EVar "hashWithSalt")
+                , H.EApp (H.EVar "saltHash")
                   [ H.ELit (H.LInt n)
                   , H.EVar "x"
                   ]
