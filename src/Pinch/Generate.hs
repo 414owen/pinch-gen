@@ -478,8 +478,7 @@ unionDatatype nm fs defCon = do
           $ fmap (\(_, fname, _, _) -> 
             H.Match "rnf" [H.PCon fname [H.PVar "x"]] 
               $ H.EApp (H.EVar "rnf")
-                [ H.EVar "s"
-                , H.EApp (H.EVar "rnf")
+                [ H.EApp (H.EVar "rnf")
                   [ H.EVar "x"
                   ]
                 ]
