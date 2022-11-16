@@ -434,16 +434,18 @@ unionDatatype nm fs defCon = do
       [ derivingEq, derivingShow ]
       , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
     , H.InstDecl (H.InstHead [] clHashable (H.TyCon nm))
-        (fmap (\(n, fname, _, _) -> H.FunBind
-          [ H.Match "hashWithSalt" [H.PVar "s", H.PCon fname [H.PVar "x"]] 
-            $ H.EApp (H.EVar "hashWithSalt")
-              [ H.EVar "s"
-              , H.EApp (H.EVar "hashWithSalt")
-                [ H.ELit (H.LInt n)
-                , H.EVar "x"
+        [ H.FunBind
+          $ fmap (\(n, fname, _, _) -> 
+            H.Match "hashWithSalt" [H.PVar "s", H.PCon fname [H.PVar "x"]] 
+              $ H.EApp (H.EVar "hashWithSalt")
+                [ H.EVar "s"
+                , H.EApp (H.EVar "hashWithSalt")
+                  [ H.ELit (H.LInt n)
+                  , H.EVar "x"
+                  ]
                 ]
-              ]
-          ]) fields)
+            ) fields
+        ]
           -- [acc, H.EVar fieldParam]) (H.EVar "s") fieldParams
           --   [ H.Match "hashWithSalt" [H.PVar "s", (H.PCon nm $ H.PVar <$> fieldParams)] 
           --   ]
