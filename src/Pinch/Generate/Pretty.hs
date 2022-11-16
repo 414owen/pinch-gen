@@ -50,7 +50,7 @@ data Decl
   | InstDecl InstHead [Decl]
   | FunBind [Match]
   | PragmaFunBind [FunctionPragma] [Match]
-  | TypeSigDecl Name Type
+  | TypeSigDecl Name [Constraint] Type
   deriving (Show)
 
 data Deriving
@@ -152,7 +152,8 @@ instance Pretty Decl where
     FunBind ms -> vsep (map pretty ms) <> line
     PragmaFunBind pragmas ms@(Match name _ _ : _) -> vsep (map pretty ms ++ prettyFunctionPragmas name pragmas) <> line
     PragmaFunBind _ _ -> mempty
-    TypeSigDecl n ty -> pretty n <+> "::" <+> pretty ty
+    -- TODO
+    TypeSigDecl n constraints ty -> pretty n <+> "::" <+> pretty ty
 
 prettyFunctionPragmas :: Name -> [FunctionPragma] -> [Doc a]
 prettyFunctionPragmas name pragmas = map prettyFunctionPragma pragmas
