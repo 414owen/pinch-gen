@@ -377,7 +377,7 @@ structDatatype nm fs = do
       [ derivingEq, derivingGenerics, derivingShow ]
     , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
     , H.InstDecl (H.InstHead [] clHashable (H.TyCon nm))
-        [ H.FunBind
+        [ H.PragmaFunBind [H.PNoInline]
           [ H.Match "hashWithSalt" [H.PVar "s", (H.PCon nm $ H.PVar <$> fieldParams)] 
             $ foldl' (\acc fieldParam -> H.EApp (H.EVar "hashWithSalt") [acc, H.EVar fieldParam]) (H.EVar "s") fieldParams
           ]
@@ -454,7 +454,7 @@ unionDatatype nm fs defCon = do
       [ derivingEq, derivingGenerics, derivingShow ]
       , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
     , H.InstDecl (H.InstHead [] clHashable (H.TyCon nm))
-        [ H.FunBind
+        [ H.PragmaFunBind [H.PNoInline]
           $ fmap (\(n, fname, _, _) -> 
             H.Match "hashWithSalt" [H.PVar "s", H.PCon fname [H.PVar "x"]] 
               $ H.EApp (H.EVar "hashWithSalt")
