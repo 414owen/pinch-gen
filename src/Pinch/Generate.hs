@@ -9,6 +9,7 @@ import           Control.Monad.Reader
 import qualified Data.ByteString                       as BS
 import           Data.Char
 import           Data.Foldable                         (forM_)
+import           Data.Functor                          ((<&>))
 import qualified Data.HashMap.Strict                   as Map
 import           Data.List
 import           Data.Maybe
@@ -308,14 +309,13 @@ gEnumDef (i, ed) =
 
 gStruct :: Struct SourcePos -> GenerateM [H.Decl]
 gStruct s = case structKind s of
-  UnionKind -> (++ [hashable]) <$> unionDatatype tyName (structFields s) SRCNone
-  StructKind -> (++ [hashable]) <$> structDatatype tyName (structFields s)
-  ExceptionKind -> (++ [hashable, ex]) <$>  structDatatype tyName (structFields s)
+  UnionKind -> unionDatatype tyName (structFields s) SRCNone
+  StructKind -> structDatatype tyName (structFields s)
+  ExceptionKind -> structDatatype tyName (structFields s)
   where
     tyName = structName s
-    hashable = H.InstDecl (H.InstHead [] clHashable (H.TyCon tyName)) []
+    fields = structFields s
     ex = H.InstDecl (H.InstHead [] clException (H.TyCon tyName)) []
-
 
 structDatatype :: T.Text -> [Field SourcePos] -> GenerateM [H.Decl]
 structDatatype nm fs = do
@@ -355,18 +355,27 @@ structDatatype nm fs = do
               fields
         ]
   settings <- asks cSettings
+  let fieldParams = fields <&> (\(_, fname, _, _) -> "p" <> fname)
   pure $
     [ H.DataDecl nm
       [ H.RecConDecl nm (zip nms tys)
       ]
       [ derivingEq, derivingGenerics, derivingShow ]
     , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
+    , H.InstDecl (H.InstHead [] clHashable (H.TyCon nm))
+        [ H.FunBind
+          [ H.Match "hashWithSalt" [H.PVar "s", (H.PCon nm $ H.PVar <$> fieldParams)] 
+            $ foldl' (\acc fieldParam -> H.EApp (H.EVar "hashWithSalt") [acc, H.EVar fieldParam]) (H.EVar "s") fieldParams
+          ]
+        ]
     ] ++ (if sGenerateArbitrary settings then [
       H.InstDecl (H.InstHead [] clArbitrary (H.TyCon nm)) [ arbitrary ]
     ] else [])
       ++ (if sGenerateNFData settings then [
       H.InstDecl (H.InstHead [] clNFData (H.TyCon nm)) []
-    ] else [])
+    ] else [
+      
+    ])
 
 data ServiceResultCon = SRCNone | SRCVoid H.Name
 
@@ -425,6 +434,14 @@ unionDatatype nm fs defCon = do
       cons
       [ derivingEq, derivingGenerics, derivingShow ]
       , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
+    , H.InstDecl (H.InstHead [] clHashable (H.TyCon nm))
+        (fmap (\(_, fname, _, _) -> H.FunBind
+          [ H.Match "hashWithSalt" [H.PCon fname [H.PVar "x"]] 
+
+          ]) fields)
+          -- [acc, H.EVar fieldParam]) (H.EVar "s") fieldParams
+          --   [ H.Match "hashWithSalt" [H.PVar "s", (H.PCon nm $ H.PVar <$> fieldParams)] 
+          --   ]
     ] ++ (if sGenerateArbitrary settings then [
       H.InstDecl (H.InstHead [] clArbitrary (H.TyCon nm)) [ arbitrary ]
     ] else [])
