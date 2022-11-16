@@ -107,6 +107,7 @@ data Lit
   = LInt Integer
   | LFloat Double
   | LString T.Text
+  | LUnit
   deriving (Show)
 
 instance Pretty ModuleName where
@@ -208,6 +209,7 @@ instance Pretty Lit where
     LInt i -> pretty i
     LFloat f -> pretty f
     LString t -> "\"" <> pretty t <> "\""
+    LUnit -> "()"
 
 cList :: [Doc ann] -> Doc ann
 cList = concatWith (surround (comma <> space))

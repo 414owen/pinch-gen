@@ -277,7 +277,12 @@ gEnum e = do
       ]
     ] else [])
     ++ (if sGenerateNFData settings then [
-      H.InstDecl (H.InstHead [] clNFData (H.TyCon tyName)) []
+      H.InstDecl (H.InstHead [] clNFData (H.TyCon tyName)) [
+        H.FunBind
+          $ fmap (\con -> 
+            H.Match "rnf" [H.PVar "s", H.PCon (enumDefName con) []]  $ H.ELit H.LUnit
+            ) (enumValues e)
+      ]
     ] else []))
   where
     tyName = enumName e
@@ -380,7 +385,12 @@ structDatatype nm fs = do
       H.InstDecl (H.InstHead [] clArbitrary (H.TyCon nm)) [ arbitrary ]
     ] else [])
       ++ (if sGenerateNFData settings then [
-      H.InstDecl (H.InstHead [] clNFData (H.TyCon nm)) []
+      H.InstDecl (H.InstHead [] clNFData (H.TyCon nm)) [
+        H.FunBind
+          [ H.Match "rnf" [H.PVar "s", (H.PCon nm $ H.PVar <$> fieldParams)] 
+            $ foldl' (\acc fieldParam -> H.EApp (H.EVar "deepseq") [H.EVar fieldParam, acc]) (H.ELit H.LUnit) fieldParams
+          ]
+      ]
     ] else [
       
     ])
@@ -462,7 +472,18 @@ unionDatatype nm fs defCon = do
       H.InstDecl (H.InstHead [] clArbitrary (H.TyCon nm)) [ arbitrary ]
     ] else [])
     ++ (if sGenerateNFData settings then [
-      H.InstDecl (H.InstHead [] clNFData (H.TyCon nm)) []
+      H.InstDecl (H.InstHead [] clNFData (H.TyCon nm)) [
+        H.FunBind
+          $ fmap (\(_, fname, _, _) -> 
+            H.Match "rnf" [H.PVar "s", H.PCon fname [H.PVar "x"]] 
+              $ H.EApp (H.EVar "rnf")
+                [ H.EVar "s"
+                , H.EApp (H.EVar "rnf")
+                  [ H.EVar "x"
+                  ]
+                ]
+            ) fields
+      ]
     ] else [])
 
 gField :: T.Text -> (Integer, Field SourcePos) -> GenerateM (Integer, H.Name, H.Type, Bool)
