@@ -151,6 +151,7 @@ gProgram s inp (Program headers defs) = do
       , H.ImportDecl (H.ModuleName "Data.HashSet") True H.IEverything
       , H.ImportDecl (H.ModuleName "GHC.Generics") True H.IEverything
       , H.ImportDecl (H.ModuleName "Data.Hashable") True H.IEverything
+      , H.ImportDecl (H.ModuleName "Data.Hashable") False $ H.IJust ["Hashable, hashWithSalt"]
       , H.ImportDecl (H.ModuleName $ sHashableVectorInstanceModule s) False (H.IJust [])
       ]
 
@@ -261,7 +262,15 @@ gEnum e = do
       [ H.FunBind fromEnum'
       , H.FunBind (toEnum' ++ [toEnumDef])
       ]
-    , H.InstDecl (H.InstHead [] clHashable (H.TyCon tyName)) []
+    , H.InstDecl (H.InstHead [] clHashable (H.TyCon tyName))
+        [ H.FunBind
+          [ H.Match "hashWithSalt" [H.PVar "s", H.PVar "x"] 
+            $ H.EApp (H.EVar "hashWithSalt")
+              [ H.EVar "s"
+              , H.EApp (H.EVar "fromEnum") [ H.EVar "x" ]
+              ]
+          ]
+        ]
     ] ++ (if sGenerateArbitrary settings then [
       H.InstDecl (H.InstHead [] clArbitrary (H.TyCon tyName)) [
         H.FunBind [ arbitrary ]
@@ -577,7 +586,7 @@ tyIO = H.TyCon $ "Prelude.IO"
 
 clPinchable, clHashable, clException, clArbitrary, clNFData :: H.ClassName
 clPinchable = "Pinch.Pinchable"
-clHashable = "Data.Hashable.Hashable"
+clHashable = "Hashable"
 clException = "Control.Exception.Exception"
 clArbitrary = "Test.QuickCheck.Arbitrary"
 clNFData = "Control.DeepSeq.NFData"
