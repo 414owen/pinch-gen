@@ -93,10 +93,14 @@ loadFile inp = do
 parseFromFile' :: FilePath -> IO (Either (E.ParseErrorBundle T.Text Void) (Program SourcePos))
 parseFromFile' path = P.runParser thriftIDL path . decodeUtf8 <$> BS.readFile path
 
-saltHash :: H.Decl
-saltHash = H.PragmaFunBind [H.PNoInline]
-  [ H.Match "saltHash" []  (H.EVar "hashWithSalt")
-  ]
+saltHash :: [H.Decl]
+saltHash = [sig, fn]
+  where
+    sig = H.TypeSigDecl "saltHash" [H.CClass "Hashable" $ H.TyCon "a"] $
+      H.TyLam [H.TyCon "Int", H.TyCon "a"] $ H.TyCon "Int"
+    fn = H.PragmaFunBind [H.PNoInline]
+      [ H.Match "saltHash" []  (H.EVar "hashWithSalt")
+      ]
 
 gProgram :: Settings -> FilePath -> Program SourcePos -> IO [H.Module]
 gProgram s inp (Program headers defs) = do
@@ -105,7 +109,7 @@ gProgram s inp (Program headers defs) = do
   let tyMap = Map.unions tyMaps
   let (typeDecls, clientDecls, serverDecls) = unzip3 $ runReader (traverse gDefinition defs) $ Context tyMap s
   let mkMod suffix = H.Module (H.ModuleName $ modBaseName <> suffix)
-        [ H.PragmaLanguage "TypeFamilies, DeriveGeneric, NoMonomorphismRestriction, TypeApplications, OverloadedStrings"
+        [ H.PragmaLanguage "TypeFamilies, DeriveGeneric, TypeApplications, OverloadedStrings"
         , H.PragmaOptsGhc "-w" ]
   pure $
     [ -- types
@@ -117,7 +121,7 @@ gProgram s inp (Program headers defs) = do
             [ "NFData", "deepseq", "rnf"]
            | sGenerateNFData s]
       )
-      (saltHash : concat typeDecls)
+      (saltHash ++ concat typeDecls)
     , -- client
       mkMod ".Client"
       ( [ impTypes
@@ -188,7 +192,7 @@ gConst constPos = do
   tyRef <- gTypeReference (constValueType constPos)
   value <- gConstValue (constValue constPos)
   pure
-    [ H.TypeSigDecl name tyRef
+    [ H.TypeSigDecl name [] tyRef
     , H.FunBind [H.Match name [] value]
     ]
   where
@@ -501,7 +505,7 @@ gService s = do
   (nms, tys, handlers, calls, tyDecls) <- unzip5 <$> traverse gFunction (serviceFunctions s)
   let serverDecls =
         [ H.DataDecl serviceTyName [ H.RecConDecl serviceConName $ zip nms tys ] []
-        , H.TypeSigDecl (prefix <> "_mkServer") (H.TyLam [H.TyCon serviceConName] (H.TyCon "Pinch.Server.ThriftServer"))
+        , H.TypeSigDecl (prefix <> "_mkServer") [] (H.TyLam [H.TyCon serviceConName] (H.TyCon "Pinch.Server.ThriftServer"))
         , H.FunBind
           [ H.Match (prefix <> "_mkServer") [H.PVar "server"]
             ( H.ELet "functions"
@@ -574,7 +578,7 @@ gFunction f = do
 
   let srvFunTy = H.TyLam ([H.TyCon "Pinch.Server.Context"] ++ argTys) (H.TyApp tyIO [retType])
   let clientFunTy = H.TyLam argTys (H.TyApp (H.TyCon "Pinch.Client.ThriftCall") [resultDataTy])
-  let callSig = H.TypeSigDecl nm $ clientFunTy
+  let callSig = H.TypeSigDecl nm [] $ clientFunTy
   let call = H.FunBind
         [ H.Match nm ( map (H.PVar . fieldName) $ functionParameters f)
           ( H.EApp (if functionOneWay f then "Pinch.Client.TOneway" else "Pinch.Client.TCall")
