@@ -122,7 +122,7 @@ gProgram s inp (Program headers defs) = do
             [ "NFData", "deepseq", "rnf"]
            | sGenerateNFData s]
       )
-      (saltHash ++ concat typeDecls)
+      (concat typeDecls)
     , -- client
       mkMod ".Client"
       ( [ impTypes
@@ -274,7 +274,7 @@ gEnum e = do
     , H.InstDecl (H.InstHead [] clHashable (H.TyCon tyName))
         [ H.PragmaFunBind [H.PNoInline]
           [ H.Match "hashWithSalt" [H.PVar "s", H.PVar "x"] 
-            $ H.EApp (H.EVar "saltHash")
+            $ H.EApp (H.EVar "hashWithSalt")
               [ H.EVar "s"
               , H.EApp (H.EVar "Prelude.fromEnum") [ H.EVar "x" ]
               ]
@@ -387,7 +387,7 @@ structDatatype nm fs = do
     , H.InstDecl (H.InstHead [] clHashable (H.TyCon nm))
         [ H.PragmaFunBind [H.PNoInline]
           [ H.Match "hashWithSalt" [H.PVar "s", (H.PCon nm $ H.PVar <$> fieldParams)] 
-            $ foldl' (\acc fieldParam -> H.EApp (H.EVar "saltHash") [acc, H.EVar fieldParam]) (H.EVar "s") fieldParams
+            $ foldl' (\acc fieldParam -> H.EApp (H.EVar "hashWithSalt") [acc, H.EVar fieldParam]) (H.EVar "s") fieldParams
           ]
         ]
     ] ++ (if sGenerateArbitrary settings then [
@@ -465,9 +465,9 @@ unionDatatype nm fs defCon = do
         [ H.PragmaFunBind [H.PNoInline]
           $ fmap (\(n, fname, _, _) -> 
             H.Match "hashWithSalt" [H.PVar "s", H.PCon fname [H.PVar "x"]] 
-              $ H.EApp (H.EVar "saltHash")
+              $ H.EApp (H.EVar "hashWithSalt")
                 [ H.EVar "s"
-                , H.EApp (H.EVar "saltHash")
+                , H.EApp (H.EVar "hashWithSalt")
                   [ H.ELit (H.LInt n)
                   , H.EVar "x"
                   ]
