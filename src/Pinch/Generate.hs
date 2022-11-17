@@ -158,7 +158,6 @@ gProgram s inp (Program headers defs) = do
       , H.ImportDecl (H.ModuleName "Data.Vector") True H.IEverything
       , H.ImportDecl (H.ModuleName "Data.HashMap.Strict") True H.IEverything
       , H.ImportDecl (H.ModuleName "Data.HashSet") True H.IEverything
-      , H.ImportDecl (H.ModuleName "GHC.Generics") True H.IEverything
       , H.ImportDecl (H.ModuleName "Data.Hashable") True H.IEverything
       , H.ImportDecl (H.ModuleName "Data.Hashable") False $ H.IJust ["Hashable, hashWithSalt"]
       , H.ImportDecl (H.ModuleName $ sHashableVectorInstanceModule s) False (H.IJust [])
@@ -261,7 +260,7 @@ gEnum :: A.Enum SourcePos -> GenerateM [H.Decl]
 gEnum e = do
   settings <- asks cSettings
   pure (
-    [ H.DataDecl tyName cons [ derivingEq, derivingOrd, derivingGenerics, derivingShow, derivingBounded ]
+    [ H.DataDecl tyName cons [ derivingEq, derivingOrd, derivingShow, derivingBounded ]
     , H.InstDecl (H.InstHead [] clPinchable (H.TyCon tyName))
       [ H.TypeDecl (H.TyApp tag [ H.TyCon tyName ]) (H.TyCon $ "Pinch.TEnum")
       , H.FunBind pinch'
@@ -382,7 +381,7 @@ structDatatype nm fs = do
     [ H.DataDecl nm
       [ H.RecConDecl nm (zip nms tys)
       ]
-      [ derivingEq, derivingGenerics, derivingShow ]
+      [ derivingEq, derivingShow ]
     , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
     , H.InstDecl (H.InstHead [] clHashable (H.TyCon nm))
         [ H.PragmaFunBind [H.PNoInline]
@@ -459,7 +458,7 @@ unionDatatype nm fs defCon = do
   pure $
     [ H.DataDecl nm
       cons
-      [ derivingEq, derivingGenerics, derivingShow ]
+      [ derivingEq, derivingShow ]
       , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
     , H.InstDecl (H.InstHead [] clHashable (H.TyCon nm))
         [ H.PragmaFunBind [H.PNoInline]
@@ -626,9 +625,8 @@ decapitalize s = if T.null s then "" else T.singleton (toLower $ T.head s) <> T.
 capitalize :: T.Text -> T.Text
 capitalize s  = if T.null s then "" else T.singleton (toUpper $ T.head s) <> T.tail s
 
-derivingShow, derivingEq, derivingOrd, derivingGenerics, derivingBounded :: H.Deriving
+derivingShow, derivingEq, derivingOrd, derivingBounded :: H.Deriving
 derivingShow = H.DeriveClass $ H.TyCon $ "Prelude.Show"
 derivingEq = H.DeriveClass $ H.TyCon $ "Prelude.Eq"
 derivingOrd = H.DeriveClass $ H.TyCon $ "Prelude.Ord"
-derivingGenerics = H.DeriveClass $ H.TyCon $ "GHC.Generics.Generic"
 derivingBounded = H.DeriveClass $ H.TyCon $ "Prelude.Bounded"
