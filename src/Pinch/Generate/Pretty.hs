@@ -180,7 +180,6 @@ bang = ("!" <>)
 strictPretty :: Type -> Doc a
 strictPretty t = bang $ case t of
   TyLam _ _ -> parens $ pretty t
-  TyApp _ _ -> parens $ pretty t
   _ -> pretty t
 
 instance Pretty ConDecl where
