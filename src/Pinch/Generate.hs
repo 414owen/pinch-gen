@@ -94,15 +94,6 @@ loadFile inp = do
 parseFromFile' :: FilePath -> IO (Either (E.ParseErrorBundle T.Text Void) (Program SourcePos))
 parseFromFile' path = P.runParser thriftIDL path . decodeUtf8 <$> BS.readFile path
 
-saltHash :: [H.Decl]
-saltHash = [sig, fn]
-  where
-    sig = H.TypeSigDecl "saltHash" [H.CClass "Hashable" $ H.TyCon "a"] $
-      H.TyLam [H.TyCon "Prelude.Int", H.TyCon "a"] $ H.TyCon "Prelude.Int"
-    fn = H.PragmaFunBind [H.PNoInline]
-      [ H.Match "saltHash" []  (H.EVar "hashWithSalt")
-      ]
-
 gProgram :: Settings -> FilePath -> Program SourcePos -> IO [H.Module]
 gProgram s inp (Program headers defs) = do
   (imports, tyMaps) <- unzip <$> traverse (gInclude s baseDir) incHeaders
@@ -271,7 +262,7 @@ gEnum e = do
       , H.FunBind (toEnum' ++ [toEnumDef])
       ]
     , H.InstDecl (H.InstHead [] clHashable (H.TyCon tyName))
-        [ H.PragmaFunBind [H.PNoInline]
+        [ H.FunBind
           [ H.Match "hashWithSalt" [H.PVar "s", H.PVar "x"] 
             $ H.EApp (H.EVar "hashWithSalt")
               [ H.EVar "s"
@@ -281,12 +272,12 @@ gEnum e = do
         ]
     ] ++ (if sGenerateArbitrary settings then [
       H.InstDecl (H.InstHead [] clArbitrary (H.TyCon tyName)) [
-        H.PragmaFunBind [H.PNoInline] [ arbitrary ]
+        H.FunBind[ arbitrary ]
       ]
     ] else [])
     ++ (if sGenerateNFData settings then [
       H.InstDecl (H.InstHead [] clNFData (H.TyCon tyName)) [
-        H.PragmaFunBind [H.PNoInline]
+        H.FunBind
           $ fmap (\con -> 
             H.Match "rnf" [H.PCon (enumDefName con) []]  $ H.ELit H.LUnit
             ) (enumValues e)
@@ -364,7 +355,7 @@ structDatatype nm fs = do
               (H.EApp "Prelude.pure" [ H.EVar $ nm ] )
               fields
         ]
-  let arbitrary = H.PragmaFunBind [H.PNoInline]
+  let arbitrary = H.FunBind
         [ H.Match "arbitrary" [] $
             foldl'
               (\acc _ ->
@@ -384,7 +375,7 @@ structDatatype nm fs = do
       [ derivingEq, derivingShow ]
     , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
     , H.InstDecl (H.InstHead [] clHashable (H.TyCon nm))
-        [ H.PragmaFunBind [H.PNoInline]
+        [ H.FunBind
           [ H.Match "hashWithSalt" [H.PVar "s", (H.PCon nm $ H.PVar <$> fieldParams)] 
             $ foldl' (\acc fieldParam -> H.EApp (H.EVar "hashWithSalt") [acc, H.EVar fieldParam]) (H.EVar "s") fieldParams
           ]
@@ -394,7 +385,7 @@ structDatatype nm fs = do
     ] else [])
       ++ (if sGenerateNFData settings then [
       H.InstDecl (H.InstHead [] clNFData (H.TyCon nm)) [
-        H.PragmaFunBind [H.PNoInline]
+        H.FunBind
           [ H.Match "rnf" [(H.PCon nm $ H.PVar <$> fieldParams)] 
             $ foldl' (\acc fieldParam -> H.EApp (H.EVar "deepseq") [H.EVar fieldParam, acc]) (H.ELit H.LUnit) fieldParams
           ]
@@ -443,7 +434,7 @@ unionDatatype nm fs defCon = do
   let cons = map (\(_, nm', ty, _) -> H.ConDecl nm' [ ty ]) fields ++ case defCon of
         SRCNone -> []
         SRCVoid c -> [H.ConDecl (nm <> c) []]
-  let arbitrary = H.PragmaFunBind [H.PNoInline]
+  let arbitrary = H.FunBind
         [ H.Match "arbitrary" [] $
             H.EApp "Test.QuickCheck.oneof"
             [ H.EList $
@@ -461,7 +452,7 @@ unionDatatype nm fs defCon = do
       [ derivingEq, derivingShow ]
       , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
     , H.InstDecl (H.InstHead [] clHashable (H.TyCon nm))
-        [ H.PragmaFunBind [H.PNoInline]
+        [ H.FunBind
           $ fmap (\(n, fname, _, _) -> 
             H.Match "hashWithSalt" [H.PVar "s", H.PCon fname [H.PVar "x"]] 
               $ H.EApp (H.EVar "hashWithSalt")
@@ -481,7 +472,7 @@ unionDatatype nm fs defCon = do
     ] else [])
     ++ (if sGenerateNFData settings then [
       H.InstDecl (H.InstHead [] clNFData (H.TyCon nm)) [
-        H.PragmaFunBind [H.PNoInline]
+        H.FunBind
           $ fmap (\(_, fname, _, _) -> 
             H.Match "rnf" [H.PCon fname [H.PVar "x"]] 
               $ H.EApp (H.EVar "rnf")

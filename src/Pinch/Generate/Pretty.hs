@@ -153,7 +153,7 @@ instance Pretty Decl where
     PragmaFunBind pragmas ms@(Match name _ _ : _) -> vsep (map pretty ms ++ prettyFunctionPragmas name pragmas) <> line
     PragmaFunBind _ _ -> mempty
     -- TODO
-    TypeSigDecl n cs ty -> pretty n <+> "::" <+> prettyConstraints cs <+> pretty ty
+    TypeSigDecl n cs ty -> pretty n <+> "::" <+> prettyConstraints cs <> pretty ty
 
 prettyFunctionPragmas :: Name -> [FunctionPragma] -> [Doc a]
 prettyFunctionPragmas name pragmas = map prettyFunctionPragma pragmas
