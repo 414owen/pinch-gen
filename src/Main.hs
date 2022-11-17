@@ -24,6 +24,7 @@ pOptions = Options
 pGenSettings :: Parser Settings
 pGenSettings = Settings
   <$> strOption (long "hashable-vec-mod" <> help "Module containing hashable instances for vector")
+  <*> flag True False (long "strict-fields")
   <*> flag True False (long "no-generate-arbitrary")
   <*> flag True False (long "no-generate-nfdata")
   <*> many (strOption (long "extra-import" <> metavar "IMPORT"))

@@ -52,8 +52,8 @@ data Deriving
   deriving (Show)
 
 data ConDecl
-  = ConDecl Name [Type]
-  | RecConDecl Name [(Name, Type)]
+  = ConDecl Bool Name [Type]
+  | RecConDecl Bool Name [(Name, Type)]
   deriving (Show)
 
 data Type
@@ -152,10 +152,22 @@ prettyDerivings ds = "deriving" <+> (parens $ cList $ map pretty ds)
 instance Pretty Deriving where
   pretty (DeriveClass c) = pretty c
 
+bang :: Doc a -> Doc a
+bang = ("!" <>)
+
+strictPretty :: Type -> Doc a
+strictPretty t = bang $ case t of
+  TyLam _ _ -> parens $ pretty t
+  _ -> pretty t
+
+fieldPretty :: Bool -> Type -> Doc a
+fieldPretty True = strictPretty
+fieldPretty False = pretty
+
 instance Pretty ConDecl where
-  pretty (ConDecl n args) = hsep $ [ pretty n ] ++ map pretty args
-  pretty (RecConDecl n args) = hsep $ [ pretty n, "{", fields, "}" ]
-    where fields = cList $ map (\(f, v) -> pretty f <+> "::" <+> pretty v) args
+  pretty (ConDecl strict n args) = hsep $ [ pretty n ] ++ map (fieldPretty strict) args
+  pretty (RecConDecl strict n args) = hsep $ [ pretty n, "{", fields, "}" ]
+    where fields = cList $ map (\(f, v) -> pretty f <+> "::" <+> fieldPretty strict v) args
 
 instance Pretty InstHead where
   pretty (InstHead cs n ty) = "instance" <> context <+> pretty n <+> pretty ty <+> "where"

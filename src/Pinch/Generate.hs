@@ -1,4 +1,4 @@
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
 module Pinch.Generate where
@@ -37,6 +37,7 @@ import qualified Text.Megaparsec.Pos                   as Pos
 data Settings
   = Settings
   { sHashableVectorInstanceModule :: T.Text
+  , sStrict                       :: Bool
   , sGenerateArbitrary            :: Bool
   , sGenerateNFData               :: Bool
   , sExtraImports                 :: [T.Text]
@@ -101,7 +102,7 @@ gProgram s inp (Program headers defs) = do
   let tyMap = Map.unions tyMaps
   let (typeDecls, clientDecls, serverDecls) = unzip3 $ runReader (traverse gDefinition defs) $ Context tyMap s
   let mkMod suffix = H.Module (H.ModuleName $ modBaseName <> suffix)
-        [ H.PragmaLanguage "TypeFamilies, DeriveGeneric, TypeApplications, OverloadedStrings"
+        [ H.PragmaLanguage "BangPatterns, DeriveGeneric, TypeFamilies, TypeApplications, OverloadedStrings"
         , H.PragmaOptsGhc "-w" ]
   pure $
     [ -- types
@@ -193,7 +194,7 @@ gConstValue val = case val of
   ConstFloat n _ -> pure (H.ELit (H.LFloat n))
   ConstLiteral s _ -> pure (H.ELit (H.LString s))
   ConstIdentifier ident _
-    | xs @(_:_:_) <- T.splitOn "." ident -> do
+    | xs@(_:_:_) <- T.splitOn "." ident -> do
       moduleMap <- asks cModuleMap
       case Map.lookup (mconcat $ init xs) moduleMap of
         Nothing ->
@@ -248,12 +249,14 @@ gTypeReference ref = case ref of
 gEnum :: A.Enum SourcePos -> GenerateM [H.Decl]
 gEnum e = do
   settings <- asks cSettings
+  enumDefs <- mapM gEnumDef $ zip [0..] $ enumValues e
+  let (cons, fromEnum', toEnum', pinch', unpinchAlts') = unzip5 enumDefs
   pure (
     [ H.DataDecl tyName cons [ derivingEq, derivingOrd, derivingGenerics, derivingShow, derivingBounded ]
     , H.InstDecl (H.InstHead [] clPinchable (H.TyCon tyName))
       [ H.TypeDecl (H.TyApp tag [ H.TyCon tyName ]) (H.TyCon $ "Pinch.TEnum")
       , H.FunBind pinch'
-      , H.FunBind [unpinch']
+      , H.FunBind [unpinch' unpinchAlts']
       ]
     , H.InstDecl (H.InstHead [] "Prelude.Enum" (H.TyCon tyName))
       [ H.FunBind fromEnum'
@@ -270,7 +273,6 @@ gEnum e = do
     ] else []))
   where
     tyName = enumName e
-    (cons, fromEnum', toEnum', pinch', unpinchAlts') = unzip5 $ map gEnumDef $ zip [0..] $ enumValues e
 
     defAlt = H.Alt (H.PVar "_")
       (H.EApp "Prelude.fail"
@@ -280,27 +282,29 @@ gEnum e = do
         ]
       )
     toEnumDef = H.Match "toEnum" [H.PVar "_"] (H.EApp "Prelude.error" [ H.ELit $ H.LString $ "Unknown value for enum " <> enumName e <> "." ])
-    unpinch' = H.Match "unpinch" [H.PVar "v"]
+    unpinch' alts = H.Match "unpinch" [H.PVar "v"]
       ( H.EDo
         [ H.StmBind (Just $ H.PVar "val") (H.EApp "Pinch.unpinch" ["v"])
-        , H.StmBind Nothing (H.ECase (H.ETyAnn "val" (H.TyCon $ "Data.Int.Int32")) (unpinchAlts' ++ [defAlt]) )
+        , H.StmBind Nothing (H.ECase (H.ETyAnn "val" (H.TyCon $ "Data.Int.Int32")) (alts ++ [defAlt]) )
         ]
       )
     arbitrary = H.Match "arbitrary" [] (
         H.EApp "Test.QuickCheck.elements" [H.EList $ map (H.EVar . enumDefName) $ enumValues e]
       )
 
-gEnumDef :: (Integer, EnumDef SourcePos) -> (H.ConDecl, H.Match, H.Match, H.Match, H.Alt)
-gEnumDef (i, ed) =
-  ( H.ConDecl conName []
-  , H.Match "fromEnum" [H.PCon conName []] (H.ELit $ H.LInt index)
-  , H.Match "toEnum" [H.PLit $ H.LInt index] (H.EVar conName)
-  , H.Match "pinch" [H.PCon conName []]
-    ( H.EApp "Pinch.pinch"
-      [ H.ETyAnn (H.ELit $ H.LInt index) (H.TyCon $ "Data.Int.Int32") ]
+gEnumDef :: (Integer, EnumDef SourcePos) -> GenerateM (H.ConDecl, H.Match, H.Match, H.Match, H.Alt)
+gEnumDef (i, ed) = do
+  settings <- asks cSettings
+  pure
+    ( H.ConDecl (sStrict settings) conName []
+    , H.Match "fromEnum" [H.PCon conName []] (H.ELit $ H.LInt index)
+    , H.Match "toEnum" [H.PLit $ H.LInt index] (H.EVar conName)
+    , H.Match "pinch" [H.PCon conName []]
+      ( H.EApp "Pinch.pinch"
+        [ H.ETyAnn (H.ELit $ H.LInt index) (H.TyCon $ "Data.Int.Int32") ]
+      )
+    , H.Alt (H.PLit $ H.LInt index) (H.EApp "Prelude.pure" [ H.EVar conName ])
     )
-  , H.Alt (H.PLit $ H.LInt index) (H.EApp "Prelude.pure" [ H.EVar conName ])
-  )
   where
     index = fromMaybe i $ enumDefValue ed
     conName = enumDefName ed
@@ -356,8 +360,7 @@ structDatatype nm fs = do
   settings <- asks cSettings
   pure $
     [ H.DataDecl nm
-      [ H.RecConDecl nm (zip nms tys)
-      ]
+      [ H.RecConDecl (sStrict settings) nm (zip nms tys) ]
       [ derivingEq, derivingGenerics, derivingShow ]
     , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
     ] ++ (if sGenerateArbitrary settings then [
@@ -404,9 +407,10 @@ unionDatatype nm fs defCon = do
               )
               fields
         ]
-  let cons = map (\(_, nm', ty, _) -> H.ConDecl nm' [ ty ]) fields ++ case defCon of
+  settings <- asks cSettings
+  let cons = map (\(_, nm', ty, _) -> H.ConDecl (sStrict settings) nm' [ ty ]) fields ++ case defCon of
         SRCNone -> []
-        SRCVoid c -> [H.ConDecl (nm <> c) []]
+        SRCVoid c -> [H.ConDecl (sStrict settings) (nm <> c) []]
   let arbitrary = H.FunBind
         [ H.Match "arbitrary" [] $
             H.EApp "Test.QuickCheck.oneof"
@@ -418,10 +422,8 @@ unionDatatype nm fs defCon = do
                 fields
             ]
         ]
-  settings <- asks cSettings
   pure $
-    [ H.DataDecl nm
-      cons
+    [ H.DataDecl nm cons
       [ derivingEq, derivingGenerics, derivingShow ]
       , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
     ] ++ (if sGenerateArbitrary settings then [
@@ -440,9 +442,10 @@ gField prefix (i, f) = do
 
 gService :: Service SourcePos -> GenerateM ([H.Decl], [H.Decl], [H.Decl])
 gService s = do
+  settings <- asks cSettings
   (nms, tys, handlers, calls, tyDecls) <- unzip5 <$> traverse gFunction (serviceFunctions s)
   let serverDecls =
-        [ H.DataDecl serviceTyName [ H.RecConDecl serviceConName $ zip nms tys ] []
+        [ H.DataDecl serviceTyName [ H.RecConDecl (sStrict settings) serviceConName $ zip nms tys ] []
         , H.TypeSigDecl (prefix <> "_mkServer") (H.TyLam [H.TyCon serviceConName] (H.TyCon "Pinch.Server.ThriftServer"))
         , H.FunBind
           [ H.Match (prefix <> "_mkServer") [H.PVar "server"]
