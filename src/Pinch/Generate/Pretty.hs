@@ -171,18 +171,10 @@ prettyConstraints cs = cList (map pretty cs)  <+> "=>"
 instance Pretty Deriving where
   pretty (DeriveClass c) = pretty c
 
-bang :: Doc a -> Doc a
-bang = ("!" <>)
-
-strictPretty :: Type -> Doc a
-strictPretty t = bang $ case t of
-  TyLam _ _ -> parens $ pretty t
-  _ -> pretty t
-
 instance Pretty ConDecl where
-  pretty (ConDecl n args) = hsep $ [ pretty n ] ++ map strictPretty args
+  pretty (ConDecl n args) = hsep $ [ pretty n ] ++ map pretty args
   pretty (RecConDecl n args) = hsep $ [ pretty n, "{", fields, "}" ]
-    where fields = cList $ map (\(f, v) -> pretty f <+> "::" <+> strictPretty v) args
+    where fields = cList $ map (\(f, v) -> pretty f <+> "::" <+> pretty v) args
 
 instance Pretty InstHead where
   pretty (InstHead cs n ty) = "instance" <+> context <> pretty n <+> pretty ty <+> "where"
