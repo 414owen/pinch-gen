@@ -281,12 +281,12 @@ gEnum e = do
         ]
     ] ++ (if sGenerateArbitrary settings then [
       H.InstDecl (H.InstHead [] clArbitrary (H.TyCon tyName)) [
-        H.FunBind [ arbitrary ]
+        H.PragmaFunBind [H.PNoInline] [ arbitrary ]
       ]
     ] else [])
     ++ (if sGenerateNFData settings then [
       H.InstDecl (H.InstHead [] clNFData (H.TyCon tyName)) [
-        H.FunBind
+        H.PragmaFunBind [H.PNoInline]
           $ fmap (\con -> 
             H.Match "rnf" [H.PCon (enumDefName con) []]  $ H.ELit H.LUnit
             ) (enumValues e)
@@ -364,7 +364,7 @@ structDatatype nm fs = do
               (H.EApp "Prelude.pure" [ H.EVar $ nm ] )
               fields
         ]
-  let arbitrary = H.FunBind
+  let arbitrary = H.PragmaFunBind [H.PNoInline]
         [ H.Match "arbitrary" [] $
             foldl'
               (\acc _ ->
@@ -394,7 +394,7 @@ structDatatype nm fs = do
     ] else [])
       ++ (if sGenerateNFData settings then [
       H.InstDecl (H.InstHead [] clNFData (H.TyCon nm)) [
-        H.FunBind
+        H.PragmaFunBind [H.PNoInline]
           [ H.Match "rnf" [(H.PCon nm $ H.PVar <$> fieldParams)] 
             $ foldl' (\acc fieldParam -> H.EApp (H.EVar "deepseq") [H.EVar fieldParam, acc]) (H.ELit H.LUnit) fieldParams
           ]
@@ -443,7 +443,7 @@ unionDatatype nm fs defCon = do
   let cons = map (\(_, nm', ty, _) -> H.ConDecl nm' [ ty ]) fields ++ case defCon of
         SRCNone -> []
         SRCVoid c -> [H.ConDecl (nm <> c) []]
-  let arbitrary = H.FunBind
+  let arbitrary = H.PragmaFunBind [H.PNoInline]
         [ H.Match "arbitrary" [] $
             H.EApp "Test.QuickCheck.oneof"
             [ H.EList $
@@ -481,7 +481,7 @@ unionDatatype nm fs defCon = do
     ] else [])
     ++ (if sGenerateNFData settings then [
       H.InstDecl (H.InstHead [] clNFData (H.TyCon nm)) [
-        H.FunBind
+        H.PragmaFunBind [H.PNoInline]
           $ fmap (\(_, fname, _, _) -> 
             H.Match "rnf" [H.PCon fname [H.PVar "x"]] 
               $ H.EApp (H.EVar "rnf")

@@ -180,7 +180,7 @@ instance Pretty ConDecl where
     where fields = cList $ map (\(f, v) -> pretty f <+> "::" <+> pretty v) args
 
 instance Pretty InstHead where
-  pretty (InstHead cs n ty) = "instance" <> context <+> pretty n <+> pretty ty <+> "where"
+  pretty (InstHead cs n ty) = "instance" <> context <> pretty n <+> pretty ty <+> "where"
     where context = prettyConstraints cs
 
 instance Pretty Constraint where
