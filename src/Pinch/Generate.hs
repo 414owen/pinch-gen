@@ -106,7 +106,9 @@ gProgram s inp (Program headers defs) = do
   pure $
     [ -- types
       mkMod ".Types"
-      (imports ++ defaultImports ++ map
+      (imports ++ defaultImports
+        ++ [H.ImportDecl (H.ModuleName "Data.Hashable") False $ H.IJust ["Hashable, hashWithSalt"]]
+        ++ map
         (\n -> H.ImportDecl (H.ModuleName n) True H.IEverything)
         (sExtraImports s ++ (if sGenerateArbitrary s then [ "Test.QuickCheck" ] else []))
         ++ [ H.ImportDecl (H.ModuleName "Control.DeepSeq") False $ H.IJust
@@ -150,7 +152,6 @@ gProgram s inp (Program headers defs) = do
       , H.ImportDecl (H.ModuleName "Data.HashMap.Strict") True H.IEverything
       , H.ImportDecl (H.ModuleName "Data.HashSet") True H.IEverything
       , H.ImportDecl (H.ModuleName "Data.Hashable") True H.IEverything
-      , H.ImportDecl (H.ModuleName "Data.Hashable") False $ H.IJust ["Hashable, hashWithSalt"]
       , H.ImportDecl (H.ModuleName $ sHashableVectorInstanceModule s) False (H.IJust [])
       ]
 
