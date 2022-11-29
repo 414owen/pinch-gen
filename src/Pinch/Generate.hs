@@ -101,7 +101,7 @@ gProgram s inp (Program headers defs) = do
   let tyMap = Map.unions tyMaps
   let (typeDecls, clientDecls, serverDecls) = unzip3 $ runReader (traverse gDefinition defs) $ Context tyMap s
   let mkMod suffix = H.Module (H.ModuleName $ modBaseName <> suffix)
-        [ H.PragmaLanguage "TypeFamilies, TypeApplications, OverloadedStrings"
+        [ H.PragmaLanguage "TypeFamilies, TypeApplications, DeriveGeneric, OverloadedStrings"
         , H.PragmaOptsGhc "-w" ]
   pure $
     [ -- types
@@ -149,6 +149,7 @@ gProgram s inp (Program headers defs) = do
       , H.ImportDecl (H.ModuleName "Data.ByteString") True H.IEverything
       , H.ImportDecl (H.ModuleName "Data.Int") True H.IEverything
       , H.ImportDecl (H.ModuleName "Data.Vector") True H.IEverything
+      , H.ImportDecl (H.ModuleName "GHC.Generics") True H.IEverything
       , H.ImportDecl (H.ModuleName "Data.HashMap.Strict") True H.IEverything
       , H.ImportDecl (H.ModuleName "Data.HashSet") True H.IEverything
       , H.ImportDecl (H.ModuleName "Data.Hashable") True H.IEverything
