@@ -251,7 +251,7 @@ gEnum :: A.Enum SourcePos -> GenerateM [H.Decl]
 gEnum e = do
   settings <- asks cSettings
   pure (
-    [ H.DataDecl tyName cons [ derivingEq, derivingOrd, derivingShow, derivingBounded ]
+    [ H.DataDecl tyName cons [ derivingEq, derivingOrd, derivingGenerics, derivingShow, derivingBounded ]
     , H.InstDecl (H.InstHead [] clPinchable (H.TyCon tyName))
       [ H.TypeDecl (H.TyApp tag [ H.TyCon tyName ]) (H.TyCon $ "Pinch.TEnum")
       , H.FunBind pinch'
@@ -372,7 +372,7 @@ structDatatype nm fs = do
     [ H.DataDecl nm
       [ H.RecConDecl nm (zip nms tys)
       ]
-      [ derivingEq, derivingShow ]
+      [ derivingEq, derivingGenerics, derivingShow ]
     , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
     , H.InstDecl (H.InstHead [] clHashable (H.TyCon nm))
         [ H.FunBind
@@ -449,7 +449,7 @@ unionDatatype nm fs defCon = do
   pure $
     [ H.DataDecl nm
       cons
-      [ derivingEq, derivingShow ]
+      [ derivingEq, derivingGenerics, derivingShow ]
       , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
     , H.InstDecl (H.InstHead [] clHashable (H.TyCon nm))
         [ H.FunBind
@@ -616,8 +616,9 @@ decapitalize s = if T.null s then "" else T.singleton (toLower $ T.head s) <> T.
 capitalize :: T.Text -> T.Text
 capitalize s  = if T.null s then "" else T.singleton (toUpper $ T.head s) <> T.tail s
 
-derivingShow, derivingEq, derivingOrd, derivingBounded :: H.Deriving
+derivingShow, derivingEq, derivingOrd, derivingGenerics, derivingBounded :: H.Deriving
 derivingShow = H.DeriveClass $ H.TyCon $ "Prelude.Show"
 derivingEq = H.DeriveClass $ H.TyCon $ "Prelude.Eq"
+derivingGenerics = H.DeriveClass $ H.TyCon $ "GHC.Generics.Generic"
 derivingOrd = H.DeriveClass $ H.TyCon $ "Prelude.Ord"
 derivingBounded = H.DeriveClass $ H.TyCon $ "Prelude.Bounded"
