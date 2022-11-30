@@ -100,13 +100,16 @@ gProgram s inp (Program headers defs) = do
   let tyMap = Map.unions tyMaps
   let (typeDecls, clientDecls, serverDecls) = unzip3 $ runReader (traverse gDefinition defs) $ Context tyMap s
   let mkMod suffix = H.Module (H.ModuleName $ modBaseName <> suffix)
-        [ H.PragmaLanguage "TypeFamilies, TypeApplications, OverloadedStrings"
+        [ H.PragmaLanguage "TypeFamilies, DeriveGeneric, TypeApplications, OverloadedStrings"
         , H.PragmaOptsGhc "-w" ]
   pure $
     [ -- types
       mkMod ".Types"
       (imports ++ defaultImports
-        ++ [H.ImportDecl (H.ModuleName "Data.Hashable") False $ H.IJust ["Hashable, hashWithSalt"]]
+        ++
+        [ H.ImportDecl (H.ModuleName "Data.Hashable") False $ H.IJust ["Hashable, hashWithSalt"]
+        , H.ImportDecl (H.ModuleName "GHC.Generics") True H.IEverything
+        ]
         ++ map
         (\n -> H.ImportDecl (H.ModuleName n) True H.IEverything)
         (sExtraImports s ++ (if sGenerateArbitrary s then [ "Test.QuickCheck" ] else []))
