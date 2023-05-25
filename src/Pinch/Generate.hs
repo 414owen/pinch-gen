@@ -92,7 +92,11 @@ loadFile inp = do
 parseFromFile' :: FilePath -> IO (Either (E.ParseErrorBundle T.Text Void) (Program SourcePos))
 parseFromFile' path = P.runParser thriftIDL path . decodeUtf8 <$> BS.readFile path
 
-
+pragmas :: [H.Pragma]
+pragmas =
+  [ H.PragmaLanguage "TypeFamilies, DeriveGeneric, TypeApplications, OverloadedStrings"
+  , H.PragmaOptsGhc "-w"
+  ]
 
 gProgram :: Settings -> FilePath -> Program SourcePos -> IO [H.Module]
 gProgram s inp (Program headers defs) = do
@@ -100,13 +104,19 @@ gProgram s inp (Program headers defs) = do
 
   let tyMap = Map.unions tyMaps
   let (typeDecls, clientDecls, serverDecls) = unzip3 $ runReader (traverse gDefinition defs) $ Context tyMap s
-  let mkMod suffix = H.Module (H.ModuleName $ modBaseName <> suffix)
-        [ H.PragmaLanguage "TypeFamilies, DeriveGeneric, TypeApplications, OverloadedStrings"
-        , H.PragmaOptsGhc "-w" ]
+
+  let mkMod suffix imports' decls
+        = H.Module
+        { H.modName = H.ModuleName $ modBaseName <> suffix
+        , H.modPragmas = pragmas
+        , H.modImports = imports <> imports'
+        , H.modDecls = decls
+        }
+
   pure $
     [ -- types
       mkMod ".Types"
-      (imports ++ defaultImports ++ map
+      (defaultImports ++ map
         (\n -> H.ImportDecl (H.ModuleName n) True H.IEverything)
         (sExtraImports s ++ (if sGenerateArbitrary s then [ "Test.QuickCheck" ] else [])
                          ++ (if sGenerateNFData s then [ "Control.DeepSeq" ] else []))
@@ -116,13 +126,13 @@ gProgram s inp (Program headers defs) = do
       mkMod ".Client"
       ( [ impTypes
         , H.ImportDecl (H.ModuleName "Pinch.Client") True H.IEverything
-        ] ++ imports ++ defaultImports)
+        ] ++ defaultImports)
       (concat clientDecls)
     , -- server
       mkMod ".Server"
       ( [ impTypes
         , H.ImportDecl (H.ModuleName "Pinch.Server") True H.IEverything
-        ] ++ imports ++ defaultImports)
+        ] ++ defaultImports)
       (concat serverDecls)
     ]
 
@@ -193,7 +203,7 @@ gConstValue val = case val of
   ConstFloat n _ -> pure (H.ELit (H.LFloat n))
   ConstLiteral s _ -> pure (H.ELit (H.LString s))
   ConstIdentifier ident _
-    | xs @(_:_:_) <- T.splitOn "." ident -> do
+    | xs@(_:_:_) <- T.splitOn "." ident -> do
       moduleMap <- asks cModuleMap
       case Map.lookup (mconcat $ init xs) moduleMap of
         Nothing ->
