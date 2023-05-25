@@ -14,13 +14,17 @@ type TypeName = T.Text
 type Name = T.Text
 type ClassName = T.Text
 
-data Module = Module
-  { modName      :: ModuleName
-  , modPragmas   :: [Pragma]
-  , modImports   :: [ImportDecl]
-  , modReexports :: [ImportDecl]
-  , modDecls     :: [Decl]
-  }
+data Module
+  = Module
+    { modName    :: ModuleName
+    , modPragmas :: [Pragma]
+    , modImports :: [ImportDecl]
+    , modDecls   :: [Decl]
+    }
+  | ReexportModule
+    { modName      :: ModuleName
+    , modReexports :: [ReexportDecl]
+    }
   deriving (Show)
 
 data Pragma
@@ -32,6 +36,11 @@ data ImportDecl = ImportDecl
   { iName      :: ModuleName
   , iQualified :: Bool
   , iThings    :: ImportNames
+  }
+  deriving (Show)
+
+data ReexportDecl = ReexportDecl
+  { rName :: ModuleName
   }
   deriving (Show)
 
@@ -114,11 +123,24 @@ instance Pretty ModuleName where
   pretty (ModuleName x) = pretty x
 
 instance Pretty Module where
-  pretty mod =
+  pretty mod@Module{} =
        vsep (map pretty $ modPragmas mod) <> line <> line
-    <> "module" <+> pretty (modName mod) <+> "where" <> line <> line
+    <> "module"
+      <+> pretty (modName mod)
+      <+> "where" <> line <> line
     <> vsep (map pretty $ modImports mod) <> line <> line
     <> vsep (map pretty $ modDecls mod)
+
+  pretty mod@ReexportModule{} =
+    "module"
+      <+> pretty (modName mod)
+      <+> "( module Exports ) where" <> line <> line
+      <> line
+      <> line
+      <> vsep (map pretty $ modReexports mod)
+
+instance Pretty ReexportDecl where
+  pretty i = "import" <+> pretty (rName i) <+> "as Exports"
 
 instance Pretty Pragma where
   pretty p = case p of
