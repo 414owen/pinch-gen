@@ -1,5 +1,6 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
 
 module Pinch.Generate where
 
@@ -11,11 +12,8 @@ import           Data.Char
 import qualified Data.HashMap.Strict                   as Map
 import           Data.List
 import           Data.Maybe
-import           Data.Vector                           (Vector)
-import qualified Data.Vector                           as V
 import qualified Data.Text                             as T
 import           Data.Text.Encoding
-import           Data.Tree                             (Tree)
 import           Prettyprinter
 import           Prettyprinter.Render.Text
 import           Data.Void
@@ -28,6 +26,7 @@ import           Language.Thrift.AST                   as A hiding ( exceptions
                                                                    )
 import           Language.Thrift.Parser
 import qualified Pinch.Generate.Pretty                 as H
+import           Pinch.Generate.DeclSCC                (declSCC)
 import           Prelude                               hiding (mod)
 import           System.Directory
 import           System.FilePath
@@ -116,13 +115,6 @@ gProgram s inp (Program headers defs) =
     modBaseName :: T.Text
     modBaseName = getModuleName s headers inp
 
-typeSCC :: [[H.TypeDecl]] -> [Tree H.TypeDecl]
-typeSCC typeDeclList = undefined
-  where
-
-    typeDecls :: Vector H.TypeDecl
-    typeDecls = V.fromList $ concat typeDeclList
-
 gProgram' :: Settings -> T.Text -> [Definition SourcePos] -> ([H.ImportDecl], [ModuleMap]) -> [H.Module]
 gProgram' s modBaseName defs (imports, tyMaps) =
     [ -- types
@@ -139,16 +131,10 @@ gProgram' s modBaseName defs (imports, tyMaps) =
         , H.ImportDecl (H.ModuleName "Pinch.Server") True H.IEverything
         ] ++ defaultImports)
       (concat serverDecls)
-    ]
+    ] <> typeMods
 
   where
-    -- allTypesMod = mkMod ".Types"
-    --   (defaultImports ++ map
-    --     (\n -> H.ImportDecl (H.ModuleName n) True H.IEverything)
-    --     (sExtraImports s ++ (if sGenerateArbitrary s then [ "Test.QuickCheck" ] else [])
-    --                      ++ (if sGenerateNFData s then [ "Control.DeepSeq" ] else []))
-    --   )
-    --   (concat typeDecls)
+    -- allTypesMod = 
 
     mkMod suffix imports' decls
       = H.Module
@@ -164,8 +150,20 @@ gProgram' s modBaseName defs (imports, tyMaps) =
     typeMod :: H.Module
     typeMod = H.ReexportModule
       { H.modName = H.ModuleName $ modBaseName <> ".Types"          
-      , H.modReexports = fmap reexportModule undefined
+      , H.modReexports = reexportModule <$> typeMods
       }
+
+    typeMods :: [H.Module]
+    typeMods = zipWith mkTypeModule [0..] $ declSCC typeDeclsL
+
+    mkTypeModule :: Int -> [H.Decl] -> H.Module
+    mkTypeModule n = mkMod (".Types" <> T.pack (show n))
+      (defaultImports ++ map
+        importEverythingQualified
+        (sExtraImports s 
+          <> [ "Test.QuickCheck" | sGenerateArbitrary s ]
+          <> [ "Control.DeepSeq" | sGenerateNFData s ])
+      )
 
     reexportModule :: H.Module -> H.ReexportDecl
     reexportModule mod = H.ReexportDecl $ H.modName mod
@@ -181,22 +179,25 @@ gProgram' s modBaseName defs (imports, tyMaps) =
 
     defaultImports :: [H.ImportDecl]
     defaultImports =
-      [ H.ImportDecl (H.ModuleName "Prelude") True H.IEverything
-      , H.ImportDecl (H.ModuleName "Control.Applicative") True H.IEverything
-      , H.ImportDecl (H.ModuleName "Control.Exception") True H.IEverything
-      , H.ImportDecl (H.ModuleName "Pinch") True H.IEverything
-      , H.ImportDecl (H.ModuleName "Pinch.Server") True H.IEverything
-      , H.ImportDecl (H.ModuleName "Pinch.Internal.RPC") True H.IEverything
-      , H.ImportDecl (H.ModuleName "Data.Text") True H.IEverything
-      , H.ImportDecl (H.ModuleName "Data.ByteString") True H.IEverything
-      , H.ImportDecl (H.ModuleName "Data.Int") True H.IEverything
-      , H.ImportDecl (H.ModuleName "Data.Vector") True H.IEverything
-      , H.ImportDecl (H.ModuleName "Data.HashMap.Strict") True H.IEverything
-      , H.ImportDecl (H.ModuleName "Data.HashSet") True H.IEverything
-      , H.ImportDecl (H.ModuleName "GHC.Generics") True H.IEverything
-      , H.ImportDecl (H.ModuleName "Data.Hashable") True H.IEverything
+      [ importEverythingQualified "Prelude"
+      , importEverythingQualified "Control.Applicative"
+      , importEverythingQualified "Control.Exception"
+      , importEverythingQualified "Pinch"
+      , importEverythingQualified "Pinch.Server"
+      , importEverythingQualified "Pinch.Internal.RPC"
+      , importEverythingQualified "Data.Text"
+      , importEverythingQualified "Data.ByteString"
+      , importEverythingQualified "Data.Int"
+      , importEverythingQualified "Data.Vector"
+      , importEverythingQualified "Data.HashMap.Strict"
+      , importEverythingQualified "Data.HashSet"
+      , importEverythingQualified "GHC.Generics"
+      , importEverythingQualified "Data.Hashable"
       , H.ImportDecl (H.ModuleName $ sHashableVectorInstanceModule s) False (H.IJust [])
       ]
+
+importEverythingQualified :: T.Text -> H.ImportDecl
+importEverythingQualified name = H.ImportDecl (H.ModuleName name) True H.IEverything
 
 type ModuleMap = Map.HashMap T.Text H.ModuleName
 
