@@ -99,21 +99,23 @@ pragmas =
   ]
 
 gProgram :: Settings -> FilePath -> Program SourcePos -> IO [H.Module]
-gProgram s inp (Program headers defs) = do
-  (imports, tyMaps) <- unzip <$> traverse (gInclude s baseDir) incHeaders
+gProgram s inp (Program headers defs) =
+  gProgram' s modBaseName defs . unzip <$> traverse (gInclude s baseDir) incHeaders
+  where
 
-  let tyMap = Map.unions tyMaps
-  let (typeDecls, clientDecls, serverDecls) = unzip3 $ runReader (traverse gDefinition defs) $ Context tyMap s
+    baseDir = dropFileName inp
 
-  let mkMod suffix imports' decls
-        = H.Module
-        { H.modName = H.ModuleName $ modBaseName <> suffix
-        , H.modPragmas = pragmas
-        , H.modImports = imports <> imports'
-        , H.modDecls = decls
-        }
+    incHeaders = mapMaybe (\x -> case x of
+      HeaderInclude i -> Just i
+      _ -> Nothing)
+      headers
 
-  pure $
+    modBaseName :: T.Text
+    modBaseName = getModuleName s headers inp
+
+
+gProgram' :: Settings -> T.Text -> [Definition SourcePos] -> ([H.ImportDecl], [ModuleMap]) -> [H.Module]
+gProgram' s modBaseName defs (imports, tyMaps) =
     [ -- types
       mkMod ".Types"
       (defaultImports ++ map
@@ -137,13 +139,28 @@ gProgram s inp (Program headers defs) = do
     ]
 
   where
-    modBaseName = getModuleName s headers inp
-    baseDir = dropFileName inp
-    incHeaders = mapMaybe (\x -> case x of
-      HeaderInclude i -> Just i
-      _ -> Nothing)
-      headers
+
+    mkMod suffix imports' decls
+      = H.Module
+      { H.modName = H.ModuleName $ modBaseName <> suffix
+      , H.modPragmas = pragmas
+      , H.modImports = imports <> imports'
+      , H.modDecls = decls
+      }
+
+    tyMap :: ModuleMap
+    tyMap = Map.unions tyMaps
+
+    typeDecls, clientDecls, serverDecls :: [[H.Decl]]
+    (typeDecls, clientDecls, serverDecls)
+      = unzip3
+      $ runReader (traverse gDefinition defs)
+      $ Context tyMap s
+
+    impTypes :: H.ImportDecl
     impTypes = H.ImportDecl (H.ModuleName $ modBaseName <> ".Types") False H.IEverything
+
+    defaultImports :: [H.ImportDecl]
     defaultImports =
       [ H.ImportDecl (H.ModuleName "Prelude") True H.IEverything
       , H.ImportDecl (H.ModuleName "Control.Applicative") True H.IEverything
