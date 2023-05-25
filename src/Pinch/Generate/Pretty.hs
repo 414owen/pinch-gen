@@ -15,10 +15,11 @@ type Name = T.Text
 type ClassName = T.Text
 
 data Module = Module
-  { modName    :: ModuleName
-  , modPragmas :: [Pragma]
-  , modImports :: [ImportDecl]
-  , modDecls   :: [Decl]
+  { modName      :: ModuleName
+  , modPragmas   :: [Pragma]
+  , modImports   :: [ImportDecl]
+  , modReexports :: [ImportDecl]
+  , modDecls     :: [Decl]
   }
   deriving (Show)
 

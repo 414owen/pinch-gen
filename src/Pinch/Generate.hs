@@ -110,6 +110,7 @@ gProgram s inp (Program headers defs) = do
         { H.modName = H.ModuleName $ modBaseName <> suffix
         , H.modPragmas = pragmas
         , H.modImports = imports <> imports'
+        , H.modReexports = []
         , H.modDecls = decls
         }
 
