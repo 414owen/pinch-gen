@@ -49,9 +49,13 @@ data ImportNames
   | IJust [ Name ]
   deriving (Show)
 
-data Decl
-  = TypeDecl Type Type
+data TypeDecl
+  = TypedefDecl Type Type
   | DataDecl TypeName [ConDecl] [Deriving]
+  deriving (Show)
+
+data Decl
+  = TypeDecl TypeDecl
   | InstDecl InstHead [Decl]
   | FunBind [Match]
   | TypeSigDecl Name Type
@@ -157,16 +161,21 @@ instance Pretty ImportNames where
 
 instance Pretty Decl where
   pretty decl = case decl of
-    TypeDecl t1 t2 -> "type" <+> pretty t1 <+> "=" <+> pretty t2 <> line
+    TypeDecl tDecl -> pretty tDecl
+    InstDecl h decls -> (nest 2 $ vsep $ [ pretty h ] ++ map pretty decls) <> line
+    FunBind ms -> vsep (map pretty ms) <> line
+    TypeSigDecl n ty -> pretty n <+> "::" <+> pretty ty
+
+
+instance Pretty TypeDecl where
+  pretty decl = case decl of
+    TypedefDecl t1 t2 -> "type" <+> pretty t1 <+> "=" <+> pretty t2 <> line
     DataDecl t [] ds -> "data" <+> pretty t <+> prettyDerivings ds <> line
     DataDecl t (c:cs) ds -> nest 2 (vsep $
         [ "data" <+> pretty t
         , "=" <+> pretty c
         ] ++ (map (\c' -> "|" <+> pretty c') cs) ++ [ prettyDerivings ds ]
       ) <> line
-    InstDecl h decls -> (nest 2 $ vsep $ [ pretty h ] ++ map pretty decls) <> line
-    FunBind ms -> vsep (map pretty ms) <> line
-    TypeSigDecl n ty -> pretty n <+> "::" <+> pretty ty
 
 prettyDerivings :: [Deriving] -> Doc a
 prettyDerivings [] = ""

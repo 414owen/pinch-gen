@@ -11,8 +11,11 @@ import           Data.Char
 import qualified Data.HashMap.Strict                   as Map
 import           Data.List
 import           Data.Maybe
+import           Data.Vector                           (Vector)
+import qualified Data.Vector                           as V
 import qualified Data.Text                             as T
 import           Data.Text.Encoding
+import           Data.Tree                             (Tree)
 import           Prettyprinter
 import           Prettyprinter.Render.Text
 import           Data.Void
@@ -113,17 +116,17 @@ gProgram s inp (Program headers defs) =
     modBaseName :: T.Text
     modBaseName = getModuleName s headers inp
 
+typeSCC :: [[H.TypeDecl]] -> [Tree H.TypeDecl]
+typeSCC typeDeclList = undefined
+  where
+
+    typeDecls :: Vector H.TypeDecl
+    typeDecls = V.fromList $ concat typeDeclList
 
 gProgram' :: Settings -> T.Text -> [Definition SourcePos] -> ([H.ImportDecl], [ModuleMap]) -> [H.Module]
 gProgram' s modBaseName defs (imports, tyMaps) =
     [ -- types
-      mkMod ".Types"
-      (defaultImports ++ map
-        (\n -> H.ImportDecl (H.ModuleName n) True H.IEverything)
-        (sExtraImports s ++ (if sGenerateArbitrary s then [ "Test.QuickCheck" ] else [])
-                         ++ (if sGenerateNFData s then [ "Control.DeepSeq" ] else []))
-      )
-      (concat typeDecls)
+      typeMod
     , -- client
       mkMod ".Client"
       ( [ impTypes
@@ -139,6 +142,13 @@ gProgram' s modBaseName defs (imports, tyMaps) =
     ]
 
   where
+    -- allTypesMod = mkMod ".Types"
+    --   (defaultImports ++ map
+    --     (\n -> H.ImportDecl (H.ModuleName n) True H.IEverything)
+    --     (sExtraImports s ++ (if sGenerateArbitrary s then [ "Test.QuickCheck" ] else [])
+    --                      ++ (if sGenerateNFData s then [ "Control.DeepSeq" ] else []))
+    --   )
+    --   (concat typeDecls)
 
     mkMod suffix imports' decls
       = H.Module
@@ -151,8 +161,17 @@ gProgram' s modBaseName defs (imports, tyMaps) =
     tyMap :: ModuleMap
     tyMap = Map.unions tyMaps
 
-    typeDecls, clientDecls, serverDecls :: [[H.Decl]]
-    (typeDecls, clientDecls, serverDecls)
+    typeMod :: H.Module
+    typeMod = H.ReexportModule
+      { H.modName = H.ModuleName $ modBaseName <> ".Types"          
+      , H.modReexports = fmap reexportModule undefined
+      }
+
+    reexportModule :: H.Module -> H.ReexportDecl
+    reexportModule mod = H.ReexportDecl $ H.modName mod
+
+    typeDeclsL, clientDecls, serverDecls :: [[H.Decl]]
+    (typeDeclsL, clientDecls, serverDecls)
       = unzip3
       $ runReader (traverse gDefinition defs)
       $ Context tyMap s
@@ -196,6 +215,13 @@ gInclude s dir i = do
   let modName = H.ModuleName $ getModuleName s headers (T.unpack $ includePath i) <> ".Types"
   let thriftModName = T.pack $ dropExtension $ T.unpack $ includePath i
   pure (H.ImportDecl modName True H.IEverything, Map.singleton thriftModName modName)
+
+-- unzipThriftDefs :: [Definition a] -> ([A.Const a], [A.Type a], [A.Service a])
+-- unzipThriftDefs = foldMap unzipThriftDef
+--   where
+--     unzipThriftDef (ConstDefinition a) = ([a], [], [])
+--     unzipThriftDef (TypeDefinition a) = ([], [a], [])
+--     unzipThriftDef (ServiceDefinition a) = ([], [], [a])
 
 gDefinition :: Definition SourcePos -> GenerateM ([H.Decl], [H.Decl], [H.Decl])
 gDefinition def = case def of
@@ -246,7 +272,7 @@ gType ty = case ty of
 gTypedef :: Typedef SourcePos -> GenerateM [H.Decl]
 gTypedef def = do
   tyRef <- gTypeReference $ typedefTargetType def
-  pure [H.TypeDecl (H.TyCon $ capitalize $ typedefName $ def) tyRef]
+  pure [H.TypeDecl $ H.TypedefDecl (H.TyCon $ capitalize $ typedefName $ def) tyRef]
 
 gTypeReference :: TypeReference SourcePos -> GenerateM H.Type
 gTypeReference ref = case ref of
@@ -276,9 +302,9 @@ gEnum :: A.Enum SourcePos -> GenerateM [H.Decl]
 gEnum e = do
   settings <- asks cSettings
   pure (
-    [ H.DataDecl tyName cons [ derivingEq, derivingOrd, derivingGenerics, derivingShow, derivingBounded ]
+    [ H.TypeDecl $ H.DataDecl tyName cons [ derivingEq, derivingOrd, derivingGenerics, derivingShow, derivingBounded ]
     , H.InstDecl (H.InstHead [] clPinchable (H.TyCon tyName))
-      [ H.TypeDecl (H.TyApp tag [ H.TyCon tyName ]) (H.TyCon $ "Pinch.TEnum")
+      [ H.TypeDecl $ H.TypedefDecl (H.TyApp tag [ H.TyCon tyName ]) (H.TyCon $ "Pinch.TEnum")
       , H.FunBind pinch'
       , H.FunBind [unpinch']
       ]
@@ -347,7 +373,7 @@ structDatatype :: T.Text -> [Field SourcePos] -> GenerateM [H.Decl]
 structDatatype nm fs = do
   fields <- traverse (gField $ decapitalize $ nm) $ zip [1..] fs
   let (_, nms, tys, _) = unzip4 fields
-  let stag = H.TypeDecl (H.TyApp tag [ H.TyCon nm ]) (H.TyCon $ "Pinch.TStruct")
+  let stag = H.TypeDecl $ H.TypedefDecl (H.TyApp tag [ H.TyCon nm ]) (H.TyCon $ "Pinch.TStruct")
   let pinch = H.FunBind
         [ H.Match "pinch" [H.PCon nm $ map H.PVar nms]
             ( H.EApp "Pinch.struct" [ H.EList $ flip map fields $ \(fId, fNm, _, fReq) ->
@@ -382,7 +408,7 @@ structDatatype nm fs = do
         ]
   settings <- asks cSettings
   pure $
-    [ H.DataDecl nm
+    [ H.TypeDecl $ H.DataDecl nm
       [ H.RecConDecl nm (zip nms tys)
       ]
       [ derivingEq, derivingGenerics, derivingShow ]
@@ -399,7 +425,7 @@ data ServiceResultCon = SRCNone | SRCVoid H.Name
 unionDatatype :: T.Text -> [Field SourcePos] -> ServiceResultCon -> GenerateM [H.Decl]
 unionDatatype nm fs defCon = do
   fields <- traverse (gField $ nm) $ zip [1..] $ map (\f -> f { fieldRequiredness = Just Required, fieldName = capitalize (fieldName f) } ) fs
-  let stag = H.TypeDecl (H.TyApp tag [ H.TyCon nm ]) (H.TyCon $ "Pinch.TUnion")
+  let stag = H.TypeDecl $ H.TypedefDecl (H.TyApp tag [ H.TyCon nm ]) (H.TyCon $ "Pinch.TUnion")
   let pinch = H.FunBind $
         map (\(fId, fNm, _, _) ->
           H.Match "pinch" [H.PCon fNm [H.PVar "x"]]
@@ -447,7 +473,7 @@ unionDatatype nm fs defCon = do
         ]
   settings <- asks cSettings
   pure $
-    [ H.DataDecl nm
+    [ H.TypeDecl $ H.DataDecl nm
       cons
       [ derivingEq, derivingGenerics, derivingShow ]
       , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
@@ -469,7 +495,7 @@ gService :: Service SourcePos -> GenerateM ([H.Decl], [H.Decl], [H.Decl])
 gService s = do
   (nms, tys, handlers, calls, tyDecls) <- unzip5 <$> traverse gFunction (serviceFunctions s)
   let serverDecls =
-        [ H.DataDecl serviceTyName [ H.RecConDecl serviceConName $ zip nms tys ] []
+        [ H.TypeDecl $ H.DataDecl serviceTyName [ H.RecConDecl serviceConName $ zip nms tys ] []
         , H.TypeSigDecl (prefix <> "_mkServer") (H.TyLam [H.TyCon serviceConName] (H.TyCon "Pinch.Server.ThriftServer"))
         , H.FunBind
           [ H.Match (prefix <> "_mkServer") [H.PVar "server"]
@@ -516,7 +542,7 @@ gFunction f = do
     (Nothing, []) -> pure ([], H.TyCon $ if functionOneWay f then "()" else "Pinch.Internal.RPC.Unit")
     _ -> do
       let thriftResultInst = H.InstDecl (H.InstHead [] "Pinch.Internal.RPC.ThriftResult" (H.TyCon dtNm))
-            [ H.TypeDecl (H.TyApp (H.TyCon "ResultType") [ H.TyCon dtNm ]) retType
+            [ H.TypeDecl $ H.TypedefDecl (H.TyApp (H.TyCon "ResultType") [ H.TyCon dtNm ]) retType
             , H.FunBind (
                map (\e -> H.Match "unwrap" [H.PCon (dtNm <> "_" <> capitalize (fieldName e)) [H.PVar "x"]] (H.EApp "Control.Exception.throwIO" ["x"])) exceptions
                ++ [ H.Match "unwrap" [H.PCon (dtNm <> "_Success") (const (H.PVar "x") <$> maybeToList (functionReturnType f))] (H.EApp "Prelude.pure" (maybeToList $ ("x" <$ functionReturnType f) <|> pure "()"))]
