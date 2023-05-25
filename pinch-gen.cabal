@@ -22,6 +22,7 @@ executable pinch-gen
                      , Pinch.Generate.Pretty
   build-depends:       base >=4.12 && < 5
                      , bytestring
+                     , containers
                      , directory
                      , filepath
                      , language-thrift >= 0.12.0.0
@@ -29,6 +30,7 @@ executable pinch-gen
                      , mtl
                      , optparse-applicative
                      , prettyprinter
+                     , vector
                      , text
                      , unordered-containers
   default-language:    Haskell2010
