@@ -1,5 +1,6 @@
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE GeneralisedNewtypeDeriving #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE OverloadedStrings          #-}
 
 module Pinch.Generate.Pretty where
 
@@ -9,23 +10,40 @@ import           Prelude hiding (mod)
 import           Prettyprinter
 
 newtype ModuleName = ModuleName T.Text
-  deriving (Show)
+  deriving (Show, Semigroup)
 type TypeName = T.Text
 type Name = T.Text
 type ClassName = T.Text
 
 data Module
   = Module
-    { modName    :: ModuleName
-    , modPragmas :: [Pragma]
-    , modImports :: [ImportDecl]
-    , modDecls   :: [Decl]
-    }
-  | ReexportModule
     { modName      :: ModuleName
+    , modPragmas   :: [Pragma]
+    , modImports   :: [ImportDecl]
     , modReexports :: [ReexportDecl]
+    , modDecls     :: [Decl]
     }
   deriving (Show)
+
+instance Semigroup Module where
+  m1@Module{} <> m2@Module{}
+    = Module
+    { modName = modName m1 <> modName m2
+    , modPragmas = modPragmas m1 <> modPragmas m2
+    , modImports = modImports m1 <> modImports m2
+    , modDecls = modDecls m1 <> modDecls m2
+    , modReexports = modReexports m1 <> modReexports m2
+    }
+
+instance Monoid Module where
+  mempty
+    = Module
+    { modName = ModuleName ""
+    , modPragmas = []
+    , modImports = []
+    , modReexports = []
+    , modDecls = []
+    }
 
 data Pragma
   = PragmaLanguage T.Text
@@ -39,7 +57,7 @@ data ImportDecl = ImportDecl
   }
   deriving (Show)
 
-data ReexportDecl = ReexportDecl
+newtype ReexportDecl = ReexportDecl
   { rName :: ModuleName
   }
   deriving (Show)
@@ -127,21 +145,29 @@ instance Pretty ModuleName where
   pretty (ModuleName x) = pretty x
 
 instance Pretty Module where
-  pretty mod@Module{} =
-       vsep (map pretty $ modPragmas mod) <> line <> line
+  pretty mod@Module{}
+    = vsep (map pretty $ modPragmas mod) <> line <> line
     <> "module"
       <+> pretty (modName mod)
-      <+> "where" <> line <> line
+      <+> exportsAndWhere
     <> vsep (map pretty $ modImports mod) <> line <> line
     <> vsep (map pretty $ modDecls mod)
 
-  pretty mod@ReexportModule{} =
-    "module"
-      <+> pretty (modName mod)
-      <+> "( module Exports ) where" <> line <> line
-      <> line
-      <> line
-      <> vsep (map pretty $ modReexports mod)
+    where
+      exportsAndWhere = if null (modReexports mod)
+        then "where" <> line <> line
+        else
+          nest 2
+          $ ("( module" <+> pretty (modName mod))
+          <> line
+          <> vsep (reexport <$> modReexports mod)
+          <> line
+          <> ") where"
+          <> line
+          <> line
+
+      reexport reexport =
+        "," <+> "module" <+> pretty reexport
 
 instance Pretty ReexportDecl where
   pretty i = "import" <+> pretty (rName i) <+> "as Exports"

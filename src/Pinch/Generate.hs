@@ -26,7 +26,7 @@ import           Language.Thrift.AST                   as A hiding ( exceptions
                                                                    )
 import           Language.Thrift.Parser
 import qualified Pinch.Generate.Pretty                 as H
-import           Pinch.Generate.DeclSCC                (declSCC)
+import           Pinch.Generate.Split                  (splitModule)
 import           Prelude                               hiding (mod)
 import           System.Directory
 import           System.FilePath
@@ -50,8 +50,6 @@ generate s inp out = do
   thrift <- loadFile inp
 
   mods <- gProgram s inp thrift
-
-
 
   forM_ mods $ \mod -> do
     let targetFile = out </> moduleFile mod
@@ -117,9 +115,7 @@ gProgram s inp (Program headers defs) =
 
 gProgram' :: Settings -> T.Text -> [Definition SourcePos] -> ([H.ImportDecl], [ModuleMap]) -> [H.Module]
 gProgram' s modBaseName defs (imports, tyMaps) =
-    [ -- types
-      typeMod
-    , -- client
+    [ -- client
       mkMod ".Client"
       ( [ impTypes
         , H.ImportDecl (H.ModuleName "Pinch.Client") True H.IEverything
@@ -141,6 +137,7 @@ gProgram' s modBaseName defs (imports, tyMaps) =
       { H.modName = H.ModuleName $ modBaseName <> suffix
       , H.modPragmas = pragmas
       , H.modImports = imports <> imports'
+      , H.modReexports = []
       , H.modDecls = decls
       }
 
@@ -148,22 +145,23 @@ gProgram' s modBaseName defs (imports, tyMaps) =
     tyMap = Map.unions tyMaps
 
     typeMod :: H.Module
-    typeMod = H.ReexportModule
+    typeMod = mempty
       { H.modName = H.ModuleName $ modBaseName <> ".Types"          
       , H.modReexports = reexportModule <$> typeMods
       }
 
     typeMods :: [H.Module]
-    typeMods = zipWith mkTypeModule [0..] $ declSCC typeDeclsL
+    typeMods = fmap augmentTypeModule $ splitModule $ concat typeDeclsL
 
-    mkTypeModule :: Int -> [H.Decl] -> H.Module
-    mkTypeModule n = mkMod (".Types" <> T.pack (show n))
+    augmentTypeModule :: H.Module -> H.Module
+    augmentTypeModule mod
+      = mkMod ".Types"
       (defaultImports ++ map
         importEverythingQualified
         (sExtraImports s 
           <> [ "Test.QuickCheck" | sGenerateArbitrary s ]
           <> [ "Control.DeepSeq" | sGenerateNFData s ])
-      )
+      ) [] <> mod
 
     reexportModule :: H.Module -> H.ReexportDecl
     reexportModule mod = H.ReexportDecl $ H.modName mod

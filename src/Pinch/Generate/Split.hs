@@ -1,23 +1,30 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 
-module Pinch.Generate.DeclSCC
-  ( declSCC
+module Pinch.Generate.Split
+  ( splitModule
   ) where
 
 import           GHC.Generics
-import           Data.Foldable                         (toList)
-import           Data.Graph                            (Graph)
-import qualified Data.Graph                            as G
+import           Data.Foldable         (toList)
+import           Data.Graph            (Graph)
+import qualified Data.Graph            as G
 import           Data.Hashable
-import qualified Data.HashMap.Strict                   as M
-import           Data.HashMap.Strict                   (HashMap)
-import           Data.Vector                           (Vector)
-import qualified Data.Vector                           as V
+import qualified Data.IntMap.Strict    as IM
+import           Data.IntMap.Strict    (IntMap)
+import qualified Data.HashMap.Strict   as M
+import           Data.HashMap.Strict   (HashMap)
+import           Data.List             (nub)
+import qualified Data.Text             as T
+import           Data.Vector           (Vector)
+import qualified Data.Vector           as V
 
-import qualified Pinch.Generate.Pretty                 as H
+import qualified Pinch.Generate.Pretty as H
 import Debug.Trace
+
+-- | This module splits haskell modules into smaller modules
 
 data HsBnd
   = TypeBnd H.Name
@@ -26,29 +33,71 @@ data HsBnd
 
 type HsEnv a = HashMap HsBnd a
 
-declSCC :: [[H.Decl]] -> [[H.Decl]]
-declSCC declsLL = fmap (declsV V.!) <$> sccInds
+type DeclRef = Int
+
+splitModule :: [H.Decl] -> [H.Module]
+splitModule declsL = finalizeModuleForest lookupVertex declsV sccInds
   where
 
-    sccInds :: [[G.Vertex]]
+    sccInds :: [[DeclRef]]
     sccInds = toList <$> G.scc graph
 
     graph :: Graph
-    (graph, _, _)
+    lookupVertex :: G.Vertex -> (H.Decl, DeclRef, [DeclRef])
+    (graph, lookupVertex, _)
       = G.graphFromEdges
       $ zipWith mkEdges [0..] declsL
 
     mkEdges :: Int -> H.Decl -> (H.Decl, Int, [Int])
     mkEdges ind decl = (decl, ind, getDeclEdges namesToInds decl)
 
-    declsL :: [H.Decl]
-    declsL = concat declsLL
-
     namesToInds :: HsEnv Int
     namesToInds = surjective $ zip (topLevelBindings <$> declsL) [0..]
 
+    -- DeclRefs index into this vector
     declsV :: Vector H.Decl
     declsV = V.fromList declsL
+
+type ModuleRef = Int
+
+-- Creates a forest of modules, where the edges are imports
+finalizeModuleForest :: (DeclRef -> (H.Decl, DeclRef, [DeclRef])) -> Vector H.Decl -> [[DeclRef]] -> [H.Module]
+finalizeModuleForest lookupVertex decls modules = zipWith mkMod [0..] modulesAndImports
+  where
+    modulesAndImports :: [([H.Decl], [ModuleRef])]
+    modulesAndImports = zip (fmap (decls V.!) <$> modules) imports
+
+    -- Which modules a module imports
+    imports :: [[ModuleRef]]
+    imports = concatMap getDeclModule <$> modules
+
+    getDeclModule :: DeclRef -> [ModuleRef]
+    getDeclModule declRef = (declToModule IM.!) <$> declEdges declRef
+
+    declEdges :: DeclRef -> [DeclRef]
+    declEdges declRef = let (_, _, edges) = lookupVertex declRef in edges
+
+    declToModule :: IntMap ModuleRef
+    declToModule = IM.fromList $ concat $ zipWith f [0..] modules
+      where
+        f :: ModuleRef -> [DeclRef] -> [(ModuleRef, G.Vertex)]
+        f moduleRef declRefs = (, moduleRef) <$> declRefs
+
+mkMod :: Int -> ([H.Decl], [ModuleRef]) -> H.Module
+mkMod moduleNum (decls, imports)
+  = mempty
+  { H.modName = H.ModuleName $ T.pack $ show moduleNum
+  , H.modImports = imp <$> nub (filter (/= moduleNum) imports)
+  , H.modDecls = decls
+  }
+  where
+    imp :: ModuleRef -> H.ImportDecl
+    imp moduleRef
+      = H.ImportDecl
+      { H.iName      = H.ModuleName $ T.pack $ show moduleRef
+      , H.iQualified = False
+      , H.iThings    = H.IEverything
+      }
 
 surjective :: (Eq a, Hashable a) => [([a], b)] -> HashMap a b
 surjective ksvs = M.fromList $ concatMap surList ksvs
