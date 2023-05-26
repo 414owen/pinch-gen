@@ -150,7 +150,10 @@ instance Pretty Module where
     <> "module"
       <+> pretty (modName mod)
       <+> exportsAndWhere
-    <> vsep (map pretty $ modImports mod) <> line <> line
+    <> vsep (map pretty $ modImports mod)
+    <> line <> line
+    <> vsep (prettyReexportImport <$> modReexports mod)
+    <> line <> line
     <> vsep (map pretty $ modDecls mod)
 
     where
@@ -158,19 +161,22 @@ instance Pretty Module where
         then "where" <> line <> line
         else
           nest 2
-          $ ("( module" <+> pretty (modName mod))
-          <> line
-          <> vsep (reexport <$> modReexports mod)
-          <> line
-          <> ") where"
+          (line
+            <> ("( module" <+> pretty (modName mod))
+            <> line
+            <> vsep (reexport <$> modReexports mod)
+            <> line
+            <> ") where")
           <> line
           <> line
 
-      reexport reexport =
-        "," <+> "module" <+> pretty reexport
+      reexport r = "," <+> pretty r
+
+prettyReexportImport :: ReexportDecl -> Doc ann
+prettyReexportImport (ReexportDecl name) = "import" <+> pretty name
 
 instance Pretty ReexportDecl where
-  pretty i = "import" <+> pretty (rName i) <+> "as Exports"
+  pretty i = "module" <+> pretty (rName i)
 
 instance Pretty Pragma where
   pretty p = case p of

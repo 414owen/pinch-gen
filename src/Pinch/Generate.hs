@@ -144,12 +144,6 @@ gProgram' s modBaseName defs (imports, tyMaps) =
     tyMap :: ModuleMap
     tyMap = Map.unions tyMaps
 
-    typeMod :: H.Module
-    typeMod = mempty
-      { H.modName = H.ModuleName $ modBaseName <> ".Types"          
-      , H.modReexports = reexportModule <$> typeMods
-      }
-
     typeMods :: [H.Module]
     typeMods = fmap augmentTypeModule $ splitModule $ concat typeDeclsL
 
@@ -161,10 +155,19 @@ gProgram' s modBaseName defs (imports, tyMaps) =
         (sExtraImports s 
           <> [ "Test.QuickCheck" | sGenerateArbitrary s ]
           <> [ "Control.DeepSeq" | sGenerateNFData s ])
-      ) [] <> mod
+      ) [] <> fixedMod
+      where
+        fixedMod
+          = mod
+          { H.modImports = prefixImport <$> H.modImports mod
+          , H.modReexports = prefixReexport <$> H.modReexports mod
+          }
 
-    reexportModule :: H.Module -> H.ReexportDecl
-    reexportModule mod = H.ReexportDecl $ H.modName mod
+    typeBaseName = H.ModuleName $modBaseName <> ".Types"
+
+    prefixImport (H.ImportDecl name a b) = H.ImportDecl (typeBaseName <> name) a b
+
+    prefixReexport (H.ReexportDecl name) = H.ReexportDecl $ typeBaseName <> name
 
     typeDeclsL, clientDecls, serverDecls :: [[H.Decl]]
     (typeDeclsL, clientDecls, serverDecls)

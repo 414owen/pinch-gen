@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric #-}
 {-# LANGUAGE DeriveAnyClass #-}
+{-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 
@@ -16,13 +17,12 @@ import qualified Data.IntMap.Strict    as IM
 import           Data.IntMap.Strict    (IntMap)
 import qualified Data.HashMap.Strict   as M
 import           Data.HashMap.Strict   (HashMap)
-import           Data.List             (nub)
+import           Data.List             (nub, partition)
 import qualified Data.Text             as T
 import           Data.Vector           (Vector)
 import qualified Data.Vector           as V
 
 import qualified Pinch.Generate.Pretty as H
-import Debug.Trace
 
 -- | This module splits haskell modules into smaller modules
 
@@ -36,8 +36,14 @@ type HsEnv a = HashMap HsBnd a
 type DeclRef = Int
 
 splitModule :: [H.Decl] -> [H.Module]
-splitModule declsL = finalizeModuleForest lookupVertex declsV sccInds
+splitModule allDeclsL
+  = rootModule
+  : instanceModule instances
+  : partsModule (length sccInds)
+  : finalizeModuleForest lookupVertex declsV sccInds
   where
+
+    (instances, declsL) = partition isInstance allDeclsL
 
     sccInds :: [[DeclRef]]
     sccInds = toList <$> G.scc graph
@@ -57,6 +63,37 @@ splitModule declsL = finalizeModuleForest lookupVertex declsV sccInds
     -- DeclRefs index into this vector
     declsV :: Vector H.Decl
     declsV = V.fromList declsL
+
+rootModule :: H.Module
+rootModule = mempty
+  { H.modReexports =
+    [ H.ReexportDecl $ H.ModuleName ".Parts"
+    , H.ReexportDecl $ H.ModuleName ".Instances"
+    ]
+  }
+
+isInstance :: H.Decl -> Bool
+isInstance node = case node of
+  H.InstDecl{} -> True
+  _ -> False
+
+instanceModule :: [H.Decl] -> H.Module
+instanceModule instanceDecls
+  = mempty
+  { H.modName = H.ModuleName ".Instances"
+  , H.modImports = [importAll $ H.ModuleName ".Parts"]
+  , H.modDecls = instanceDecls
+  }
+
+partsModule :: Int -> H.Module
+partsModule nParts
+  = mempty
+  { H.modName = H.ModuleName ".Parts"
+  , H.modReexports = H.ReexportDecl . partName <$> [0..nParts - 1]
+  }
+
+partName :: Int -> H.ModuleName
+partName = H.ModuleName . (".Part" <>) . T.pack . show
 
 type ModuleRef = Int
 
@@ -86,18 +123,21 @@ finalizeModuleForest lookupVertex decls modules = zipWith mkMod [0..] modulesAnd
 mkMod :: Int -> ([H.Decl], [ModuleRef]) -> H.Module
 mkMod moduleNum (decls, imports)
   = mempty
-  { H.modName = H.ModuleName $ T.pack $ show moduleNum
-  , H.modImports = imp <$> nub (filter (/= moduleNum) imports)
+  { H.modName = partName moduleNum
+  , H.modImports = importPart <$> nub (filter (/= moduleNum) imports)
   , H.modDecls = decls
   }
-  where
-    imp :: ModuleRef -> H.ImportDecl
-    imp moduleRef
-      = H.ImportDecl
-      { H.iName      = H.ModuleName $ T.pack $ show moduleRef
-      , H.iQualified = False
-      , H.iThings    = H.IEverything
-      }
+
+importAll :: H.ModuleName -> H.ImportDecl
+importAll modName
+  = H.ImportDecl
+  { H.iName      = modName
+  , H.iQualified = False
+  , H.iThings    = H.IEverything
+  }
+
+importPart :: ModuleRef -> H.ImportDecl
+importPart moduleRef = importAll $ partName moduleRef
 
 surjective :: (Eq a, Hashable a) => [([a], b)] -> HashMap a b
 surjective ksvs = M.fromList $ concatMap surList ksvs
