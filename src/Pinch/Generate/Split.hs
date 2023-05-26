@@ -8,16 +8,18 @@ module Pinch.Generate.Split
   ( splitModule
   ) where
 
+import           Control.Arrow         ((&&&))
 import           GHC.Generics
+import           Data.Bifunctor        (second)
 import           Data.Foldable         (toList)
 import           Data.Graph            (Graph)
 import qualified Data.Graph            as G
 import           Data.Hashable
 import qualified Data.IntMap.Strict    as IM
 import           Data.IntMap.Strict    (IntMap)
-import qualified Data.HashMap.Strict   as M
+import qualified Data.HashMap.Strict   as HM
 import           Data.HashMap.Strict   (HashMap)
-import           Data.List             (nub, partition)
+import           Data.List             (nub, sortOn)
 import qualified Data.Text             as T
 import           Data.Vector           (Vector)
 import qualified Data.Vector           as V
@@ -37,13 +39,21 @@ type DeclRef = Int
 
 splitModule :: [H.Decl] -> [H.Module]
 splitModule allDeclsL
-  = rootModule
-  : instanceModule instances
-  : partsModule (length sccInds)
-  : finalizeModuleForest lookupVertex declsV sccInds
+  = (instanceModules <>)
+  $ rootModule
+  : partsModule (length mergedTypeDeclModules)
+  : finalizeModuleForest lookupVertex declsV mergedTypeDeclModules
   where
 
-    (instances, declsL) = partition isInstance allDeclsL
+    allDeclsV :: Vector H.Decl
+    allDeclsV = V.fromList allDeclsL
+
+    instanceModules = splitInstances instances
+
+    (instances, declsL) = second V.toList $ V.partitionWith partitionInstance allDeclsV
+
+    mergedTypeDeclModules :: [[DeclRef]]
+    mergedTypeDeclModules = mergeTypeDeclModules sccInds
 
     sccInds :: [[DeclRef]]
     sccInds = toList <$> G.scc graph
@@ -64,6 +74,24 @@ splitModule allDeclsL
     declsV :: Vector H.Decl
     declsV = V.fromList declsL
 
+declsPerModule :: Int
+declsPerModule = 15
+
+mergeTypeDeclModules :: [[DeclRef]] -> [[DeclRef]]
+mergeTypeDeclModules = go . sortOn snd . fmap (id &&& length)
+  where
+    -- greedy algo to merge modules, not optimal
+    -- probably doesn't matter though
+    go :: [([a], Int)] -> [[a]]
+    go [] = []
+    go [(a, l1), (b, l2)]
+      | l1 < declsPerModule || l2 < declsPerModule = [a <> b]
+      | otherwise = [a, b]
+    go ((a, l1) : (b, l2) : xs)
+      | l1 >= declsPerModule = a : go ((b, l2) : xs)
+      | otherwise = go $ (a <> b, l1 + l2) : xs
+    go [(a, _)] = [a]
+
 rootModule :: H.Module
 rootModule = mempty
   { H.modReexports =
@@ -72,10 +100,36 @@ rootModule = mempty
     ]
   }
 
-isInstance :: H.Decl -> Bool
-isInstance node = case node of
-  H.InstDecl{} -> True
-  _ -> False
+partitionInstance :: H.Decl -> Either (H.InstHead, [H.Decl]) H.Decl
+partitionInstance node = case node of
+  H.InstDecl h decls -> Left (h, decls)
+  a -> Right a
+
+splitInstances :: Vector (H.InstHead, [H.Decl]) -> [H.Module]
+splitInstances decls = rootMod : mods
+  where
+    classToInsts :: HashMap H.ClassName [(H.InstHead, [H.Decl])]
+    classToInsts = HM.fromListWith (<>) $ V.toList $ fmap (byClass &&& pure) decls
+
+    mods :: [H.Module]
+    mods = uncurry toMod <$> HM.toList classToInsts
+
+    toMod :: H.ClassName -> [(H.InstHead, [H.Decl])] -> H.Module
+    toMod className instances
+      = mempty
+      { H.modName = H.ModuleName $ ".Instances." <> T.reverse (T.takeWhile (/= '.') $ T.reverse className)
+      , H.modDecls = uncurry H.InstDecl <$> instances
+      }
+
+    rootMod :: H.Module
+    rootMod
+      = mempty
+      { H.modName = H.ModuleName ".Instances"
+      , H.modReexports = H.ReexportDecl . H.modName <$> mods
+      }
+
+byClass :: (H.InstHead, a) -> T.Text
+byClass (H.InstHead _ className _, _) = className
 
 instanceModule :: [H.Decl] -> H.Module
 instanceModule instanceDecls
@@ -140,7 +194,7 @@ importPart :: ModuleRef -> H.ImportDecl
 importPart moduleRef = importAll $ partName moduleRef
 
 surjective :: (Eq a, Hashable a) => [([a], b)] -> HashMap a b
-surjective ksvs = M.fromList $ concatMap surList ksvs
+surjective ksvs = HM.fromList $ concatMap surList ksvs
   where
     surList (ks, v) = (, v) <$> ks
 
@@ -176,7 +230,7 @@ topLevelFunBindings (H.Match name _ _) = TermBnd name
 ------------------
 
 accEnv :: HsEnv a -> HsBnd -> [a]
-accEnv env bnd = case M.lookup bnd env of
+accEnv env bnd = case HM.lookup bnd env of
   Nothing -> []
   Just a -> [a]
 
