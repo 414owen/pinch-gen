@@ -10,7 +10,7 @@ import           Prelude hiding (mod)
 import           Prettyprinter
 
 newtype ModuleName = ModuleName T.Text
-  deriving (Show, Semigroup)
+  deriving (Eq, Show, Semigroup)
 type TypeName = T.Text
 type Name = T.Text
 type ClassName = T.Text

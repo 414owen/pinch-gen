@@ -10,7 +10,7 @@ module Pinch.Generate.Split
 
 import           Control.Arrow         ((&&&))
 import           GHC.Generics
-import           Data.Bifunctor        (second)
+import           Data.Bifunctor        (first, second)
 import           Data.Foldable         (toList)
 import           Data.Graph            (Graph)
 import qualified Data.Graph            as G
@@ -37,18 +37,29 @@ type HsEnv a = HashMap HsBnd a
 
 type DeclRef = Int
 
+data InstanceSplit
+  = ByType
+  | ByClass
+  deriving Eq
+
+instanceStrategy :: InstanceSplit
+instanceStrategy = ByType
+
 splitModule :: [H.Decl] -> [H.Module]
 splitModule allDeclsL
   = (instanceModules <>)
   $ rootModule
   : partsModule (length mergedTypeDeclModules)
-  : finalizeModuleForest lookupVertex declsV mergedTypeDeclModules
+  : finalizeModuleForest lookupVertex declsV instances mergedTypeDeclModules
   where
 
     allDeclsV :: Vector H.Decl
     allDeclsV = V.fromList allDeclsL
 
-    instanceModules = splitInstances instances
+    instanceModules :: [H.Module]
+    instanceModules = if instanceStrategy == ByClass
+      then splitInstances instances
+      else []
 
     (instances, declsL) = second V.toList $ V.partitionWith partitionInstance allDeclsV
 
@@ -75,7 +86,7 @@ splitModule allDeclsL
     declsV = V.fromList declsL
 
 declsPerModule :: Int
-declsPerModule = 15
+declsPerModule = 3
 
 mergeTypeDeclModules :: [[DeclRef]] -> [[DeclRef]]
 mergeTypeDeclModules = go . sortOn snd . fmap (id &&& length)
@@ -94,16 +105,23 @@ mergeTypeDeclModules = go . sortOn snd . fmap (id &&& length)
 
 rootModule :: H.Module
 rootModule = mempty
-  { H.modReexports =
-    [ H.ReexportDecl $ H.ModuleName ".Parts"
-    , H.ReexportDecl $ H.ModuleName ".Instances"
-    ]
+  { H.modReexports
+    = [ H.ReexportDecl $ H.ModuleName ".Parts" ]
+    <> [ H.ReexportDecl $ H.ModuleName ".Instances" | instanceStrategy == ByClass ]
   }
 
 partitionInstance :: H.Decl -> Either (H.InstHead, [H.Decl]) H.Decl
 partitionInstance node = case node of
   H.InstDecl h decls -> Left (h, decls)
   a -> Right a
+
+instanceDeps :: HM.HashMap H.ClassName [H.ClassName]
+instanceDeps = HM.fromList
+  [ ("Pinchable", ["Hashable"])
+  , ("ThriftResult", ["Pinchable", "Exception"])
+  -- Needed for constructing hashsets etc.
+  , ("Arbitrary", ["Hashable"])
+  ]
 
 splitInstances :: Vector (H.InstHead, [H.Decl]) -> [H.Module]
 splitInstances decls = rootMod : mods
@@ -115,11 +133,20 @@ splitInstances decls = rootMod : mods
     mods = uncurry toMod <$> HM.toList classToInsts
 
     toMod :: H.ClassName -> [(H.InstHead, [H.Decl])] -> H.Module
-    toMod className instances
-      = mempty
-      { H.modName = H.ModuleName $ ".Instances." <> T.reverse (T.takeWhile (/= '.') $ T.reverse className)
+    toMod fullClassName instances = 
+      let className = T.reverse (T.takeWhile (/= '.') $ T.reverse fullClassName)
+      in
+      
+      mempty
+      { H.modName = H.ModuleName $ ".Instances." <> className
       , H.modDecls = uncurry H.InstDecl <$> instances
+      , H.modImports = importAll (H.ModuleName ".Parts") :
+          (toInstanceImport <$> filter haveInstanceModule (concat (HM.lookup className instanceDeps)))
       }
+
+    haveInstanceModule :: H.ClassName -> Bool
+    haveInstanceModule className = H.ModuleName (".Instances." <> className)
+      `elem` fmap H.modName mods
 
     rootMod :: H.Module
     rootMod
@@ -128,9 +155,14 @@ splitInstances decls = rootMod : mods
       , H.modReexports = H.ReexportDecl . H.modName <$> mods
       }
 
+toInstanceImport :: H.ClassName -> H.ImportDecl
+toInstanceImport className = importAll $ H.ModuleName $ ".Instances." <> className
+
 byClass :: (H.InstHead, a) -> T.Text
 byClass (H.InstHead _ className _, _) = className
 
+{-
+-- To create a module with all instances
 instanceModule :: [H.Decl] -> H.Module
 instanceModule instanceDecls
   = mempty
@@ -138,6 +170,7 @@ instanceModule instanceDecls
   , H.modImports = [importAll $ H.ModuleName ".Parts"]
   , H.modDecls = instanceDecls
   }
+-}
 
 partsModule :: Int -> H.Module
 partsModule nParts
@@ -152,11 +185,28 @@ partName = H.ModuleName . (".Part" <>) . T.pack . show
 type ModuleRef = Int
 
 -- Creates a forest of modules, where the edges are imports
-finalizeModuleForest :: (DeclRef -> (H.Decl, DeclRef, [DeclRef])) -> Vector H.Decl -> [[DeclRef]] -> [H.Module]
-finalizeModuleForest lookupVertex decls modules = zipWith mkMod [0..] modulesAndImports
+finalizeModuleForest
+  :: (DeclRef -> (H.Decl, DeclRef, [DeclRef]))
+  -> Vector H.Decl
+  -> Vector (H.InstHead, [H.Decl])
+  -> [[DeclRef]]
+  -> [H.Module]
+finalizeModuleForest lookupVertex decls instanceDecls modules = zipWith mkMod [0..] modulesAndImports
   where
     modulesAndImports :: [([H.Decl], [ModuleRef])]
-    modulesAndImports = zip (fmap (decls V.!) <$> modules) imports
+    modulesAndImports
+      = (if instanceStrategy == ByType then first (concatMap declWithInstances) else id)
+      <$> zip (fmap (decls V.!) <$> modules) imports
+
+    declWithInstances :: H.Decl -> [H.Decl]
+    declWithInstances dec = dec : concat (typeDeclName dec >>= flip HM.lookup typeToInstances)
+
+    typeToInstances :: HashMap H.TypeName [H.Decl]
+    typeToInstances
+      = HM.fromListWith (<>)
+      $ fmap (second pure)
+      $ (instanceTarget . fst &&& uncurry H.InstDecl)
+      <$> V.toList instanceDecls
 
     -- Which modules a module imports
     imports :: [[ModuleRef]]
@@ -173,6 +223,24 @@ finalizeModuleForest lookupVertex decls modules = zipWith mkMod [0..] modulesAnd
       where
         f :: ModuleRef -> [DeclRef] -> [(ModuleRef, G.Vertex)]
         f moduleRef declRefs = (, moduleRef) <$> declRefs
+
+typeDeclName :: H.Decl -> Maybe T.Text
+typeDeclName (H.TypeDecl (H.DataDecl name _ _)) = Just name
+typeDeclName (H.TypeDecl (H.TypedefDecl t _)) = Just $ f t
+  where
+    f :: H.Type -> T.Text
+    f node = case node of
+      H.TyApp t' _ -> f t'
+      H.TyCon name -> name
+      H.TyLam _ _ -> "->"
+typeDeclName _ = Nothing
+
+instanceTarget :: H.InstHead -> H.TypeName
+instanceTarget (H.InstHead _ _ t) = typeTarget t
+  where
+    typeTarget (H.TyApp t' _) = typeTarget t'
+    typeTarget (H.TyCon name) = name
+    typeTarget (H.TyLam _ _) = "->" -- not helpful
 
 mkMod :: Int -> ([H.Decl], [ModuleRef]) -> H.Module
 mkMod moduleNum (decls, imports)
