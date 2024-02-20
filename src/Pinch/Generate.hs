@@ -193,7 +193,7 @@ gConstValue val = case val of
   ConstFloat n _ -> pure (H.ELit (H.LFloat n))
   ConstLiteral s _ -> pure (H.ELit (H.LString s))
   ConstIdentifier ident _
-    | xs @(_:_:_) <- T.splitOn "." ident -> do
+    | xs@(_:_:_) <- T.splitOn "." ident -> do
       moduleMap <- asks cModuleMap
       case Map.lookup (mconcat $ init xs) moduleMap of
         Nothing ->
