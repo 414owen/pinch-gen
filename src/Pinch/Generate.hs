@@ -1,5 +1,7 @@
 {-# LANGUAGE LambdaCase #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE ViewPatterns #-}
 
 module Pinch.Generate where
 
@@ -102,7 +104,7 @@ gProgram s inp (Program headers defs) = do
   let tyMap = Map.unions tyMaps
   let (typeDecls, clientDecls, serverDecls) = unzip3 $ runReader (traverse gDefinition defs) $ Context tyMap s
   let mkMod suffix = H.Module (H.ModuleName $ modBaseName <> suffix)
-        [ H.PragmaLanguage "TypeFamilies, DeriveGeneric, TypeApplications, OverloadedStrings"
+        [ H.PragmaLanguage "TypeFamilies, GeneralizedNewtypeDeriving, DeriveGeneric, TypeApplications, OverloadedStrings"
         , H.PragmaOptsGhc "-w" ]
   pure $
     [ -- types
@@ -351,7 +353,7 @@ structDatatype nm fs = do
                   "Test.QuickCheck.arbitrary"
                 )
               )
-              (H.EApp "Prelude.pure" [ H.EVar $ nm ] )
+              (H.EApp "Prelude.pure" [ H.EVar nm ] )
               fields
         ]
   settings <- asks cSettings
@@ -372,8 +374,8 @@ data ServiceResultCon = SRCNone | SRCVoid H.Name
 
 unionDatatype :: T.Text -> [Field SourcePos] -> ServiceResultCon -> GenerateM [H.Decl]
 unionDatatype nm fs defCon = do
-  fields <- traverse (gField $ nm) $ zip [1..] $ map (\f -> f { fieldRequiredness = Just Required, fieldName = capitalize (fieldName f) } ) fs
-  let stag = H.TypeDecl (H.TyApp tag [ H.TyCon nm ]) (H.TyCon $ "Pinch.TUnion")
+  fields <- traverse (gField nm) $ zip [1..] $ map (\f -> f { fieldRequiredness = Just Required, fieldName = capitalize (fieldName f) } ) fs
+  let stag = H.TypeDecl (H.TyApp tag [ H.TyCon nm ]) (H.TyCon "Pinch.TUnion")
   let pinch = H.FunBind $
         map (\(fId, fNm, _, _) ->
           H.Match "pinch" [H.PCon fNm [H.PVar "x"]]
@@ -432,6 +434,78 @@ unionDatatype nm fs defCon = do
       H.InstDecl (H.InstHead [] clNFData (H.TyCon nm)) []
     ] else [])
 
+resultType :: T.Text -> Maybe (Field SourcePos) -> [Field SourcePos] -> ServiceResultCon -> GenerateM [H.Decl]
+-- Fall back to a full data definition
+resultType nm mSuccess errors@(_:_:_) defCon = unionDatatype nm (maybeToList mSuccess <> errors) defCon
+resultType nm mSuccess [] defCon = unionDatatype nm (maybeToList mSuccess <> []) defCon
+resultType nm mSuccess [err] defCon = do
+  let stag = H.TypeDecl (H.TyApp tag [ H.TyCon nm ]) (H.TyCon "Pinch.TUnion")
+
+  successType <- maybe (pure $ H.TyCon "()") (gTypeReference . fieldValueType) mSuccess
+
+  let successField@(succCons, succIx, succTy) =
+        ("Prelude.Right", fromMaybe 0 $ fieldIdentifier =<< mSuccess, successType)
+  errField@(errCons, errIx, errTy) <- do
+    (_, errType) <- gFieldType err
+    pure ("Prelude.Left", fromMaybe 1 $ fieldIdentifier err, errType)
+  let fields = successField : [errField]
+
+  let pinch = H.FunBind
+        [ H.Match "pinch" [H.PCon nm [H.PVar "x"]]
+          (H.ECase (H.EVar "x")
+            [ case defCon of
+                SRCNone -> H.Alt (H.PCon succCons ["y"]) $ H.EApp "Pinch.union" [ H.ELit $ H.LInt errIx, "y"]
+                SRCVoid _ -> H.Alt (H.PCon succCons [H.PWildcard]) $ H.EApp "Pinch.pinch" [ "Pinch.Internal.RPC.Unit" ]
+            , H.Alt (H.PCon errCons [H.PVar "y"])
+              ( H.EApp "Pinch.union" [ H.ELit $ H.LInt errIx, "y"] )
+            ]
+          )
+        ]
+
+  let unpinch = H.FunBind
+        [ H.Match "unpinch" [H.PVar "v"]
+        $ H.EInfix "Prelude.<$>" (H.EVar nm)
+        $ foldl'
+            (\acc (cName, fId, _) ->
+              H.EInfix "Control.Applicative.<|>" acc (
+                H.EInfix "Prelude.<$>"
+                  (H.EVar cName)
+                  (H.EInfix "Pinch..:" "v" $ H.ELit $ H.LInt fId)
+              )
+            )
+            ( case defCon of
+                SRCNone -> "Control.Applicative.empty"
+                SRCVoid _ ->
+                  H.EInfix "Prelude.<$" (H.EApp "Prelude.Right" ["()"])
+                    "(Pinch.unpinch v :: Pinch.Parser Pinch.Internal.RPC.Unit)"
+            )
+            [errField]
+        ]
+
+  let arbitrary = H.FunBind
+        [ H.Match "arbitrary" []
+        $ H.EInfix "Prelude.<$>" (H.EVar nm)
+        $ H.EApp "Test.QuickCheck.oneof"
+            [ H.EList $
+              map
+                (\(nm', _, _) ->
+                  H.EInfix "Prelude.<$>" (H.EVar nm') "Test.QuickCheck.arbitrary"
+                )
+                fields
+            ]
+        ]
+  settings <- asks cSettings
+  pure $
+    [ H.NewtypeDecl nm nm (H.NewtypeConDecl (H.TyApp (H.TyCon "Prelude.Either") $ reverse $ fmap (\(_,_,ty) -> ty) fields))
+      [ derivingEq, derivingGenerics, derivingShow ]
+      , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
+    ] ++ (if sGenerateArbitrary settings then [
+      H.InstDecl (H.InstHead [] clArbitrary (H.TyCon nm)) [ arbitrary ]
+    ] else [])
+    ++ (if sGenerateNFData settings then [
+      H.InstDecl (H.InstHead [] clNFData (H.TyCon nm)) []
+    ] else [])
+
 gField :: T.Text -> (Integer, Field SourcePos) -> GenerateM (Integer, H.Name, H.Type, Bool)
 gField prefix (i, f) = do
   (req, ty) <- gFieldType f
@@ -470,59 +544,39 @@ gFieldType :: Field SourcePos -> GenerateM (Bool, H.Type)
 gFieldType f = do
   ty <- gTypeReference (fieldValueType f)
   case fieldRequiredness f of
-    Just Optional -> pure (False, H.TyApp (H.TyCon $ "Prelude.Maybe") [ ty ])
+    Just Optional -> pure (False, H.TyApp (H.TyCon "Prelude.Maybe") [ ty ])
     _ -> pure (True, ty)
 
 gFunction :: Function SourcePos -> GenerateM (H.Name, H.Type, H.Exp, [H.Decl], [H.Decl])
 gFunction f = do
-  argTys <- traverse (fmap snd . gFieldType) (functionParameters f)
+  argTys <- traverse (fmap snd . gFieldType) (A.functionParameters f)
   retType <- maybe (pure tyUnit) gTypeReference (functionReturnType f)
 
 
-  argDataTy <- structDatatype argDataTyNm (functionParameters f)
-  let catchers = map
-        (\e -> H.EApp "Control.Exception.Handler"
-          [ H.EInfix "Prelude.." "Prelude.pure" (H.EVar $ dtNm <> "_" <> capitalize (fieldName e))
-          ]
-        ) exceptions
+  argDataTy <- structDatatype argDataTyNm (A.functionParameters f)
   let resultField = fmap (\ty -> Field (Just 0) (Just Optional) ty "success" Nothing  [] Nothing (Pos.initialPos "")) (functionReturnType f)
   (resultDecls, resultDataTy) <- case (functionReturnType f, exceptions) of
     (Nothing, []) -> pure ([], H.TyCon $ if functionOneWay f then "()" else "Pinch.Internal.RPC.Unit")
     _ -> do
-      let thriftResultInst = H.InstDecl (H.InstHead [] "Pinch.Internal.RPC.ThriftResult" (H.TyCon dtNm))
-            [ H.TypeDecl (H.TyApp (H.TyCon "ResultType") [ H.TyCon dtNm ]) retType
-            , H.FunBind (
-               map (\e -> H.Match "unwrap" [H.PCon (dtNm <> "_" <> capitalize (fieldName e)) [H.PVar "x"]] (H.EApp "Control.Exception.throwIO" ["x"])) exceptions
-               ++ [ H.Match "unwrap" [H.PCon (dtNm <> "_Success") (const (H.PVar "x") <$> maybeToList (functionReturnType f))] (H.EApp "Prelude.pure" (maybeToList $ ("x" <$ functionReturnType f) <|> pure "()"))]
-              )
-            , H.FunBind [H.Match "wrap" ["m"] (
-              ( H.EApp "Control.Exception.catches"
-                [ H.EInfix
-                    (if isNothing (functionReturnType f) then "Prelude.<$" else "Prelude.<$>")
-                    (H.EVar $ dtNm <> "_Success")
-                    "m"
-                , H.EList catchers
-                ]
-              ) ) ]
-            ]
-      dt <- unionDatatype
+      thriftResultInst <- gResultInstance
+      dt <- resultType
         dtNm
-        (maybeToList resultField ++ exceptions)
+        resultField
+        exceptions
         (case functionReturnType f of
           Nothing -> SRCVoid "_Success"
           _ -> SRCNone
         )
       pure ((thriftResultInst : dt), H.TyCon dtNm)
 
-
   let srvFunTy = H.TyLam ([H.TyCon "Pinch.Server.Context"] ++ argTys) (H.TyApp tyIO [retType])
   let clientFunTy = H.TyLam argTys (H.TyApp (H.TyCon "Pinch.Client.ThriftCall") [resultDataTy])
   let callSig = H.TypeSigDecl nm $ clientFunTy
   let call = H.FunBind
-        [ H.Match nm ( map (H.PVar . fieldName) $ functionParameters f)
+        [ H.Match nm ( map (H.PVar . fieldName) $ A.functionParameters f)
           ( H.EApp (if functionOneWay f then "Pinch.Client.TOneway" else "Pinch.Client.TCall")
             [ H.ELit $ H.LString $ functionName f
-            , H.EApp (H.EVar argDataTyNm) $ map (H.EVar . fieldName) (functionParameters f)
+            , H.EApp (H.EVar argDataTyNm) $ map (H.EVar . fieldName) (A.functionParameters f)
             ]
           )
         ]
@@ -542,9 +596,68 @@ gFunction f = do
   where
     nm = decapitalize $ functionName f
     dtNm = capitalize (functionName f) <> "_Result"
-    argVars = take (length $ functionParameters f) $ map T.singleton ['a'..]
+    argVars = take (length $ A.functionParameters f) $ map T.singleton ['a'..]
     argDataTyNm = capitalize $ functionName f <> "_Args"
     exceptions = concat $ maybeToList $ functionExceptions f
+
+    catchers :: H.Exp
+    catchers = H.EList $ map
+      (\e -> H.EApp "Control.Exception.Handler"
+        [ H.EInfix "Prelude.." "Prelude.pure" (H.EVar $ dtNm <> "_" <> capitalize (fieldName e)) ]
+      ) exceptions
+
+    gResultInstance :: GenerateM H.Decl
+    gResultInstance
+      | length exceptions == 1 = do
+          retType <- maybe (pure tyUnit) gTypeReference (functionReturnType f)
+          pure $ H.InstDecl (H.InstHead [] "Pinch.Internal.RPC.ThriftResult" (H.TyCon dtNm))
+            [ H.TypeDecl (H.TyApp (H.TyCon "ResultType") [ H.TyCon dtNm ]) retType
+            , H.FunBind 
+               [ H.Match "unwrap"
+                  [H.PCon dtNm ["x"]]
+                  (H.ECase "x"
+                    [ H.Alt (H.PCon "Prelude.Right" ["a"])
+                      (H.EApp "Prelude.pure" ["a"])
+                    , H.Alt (H.PCon "Prelude.Left" ["err"])
+                      (H.EApp "Control.Exception.throwIO" ["err"])
+                    ])
+               ]
+            , H.FunBind
+              [ H.Match "wrap" ["m"]
+                $ H.EInfix "Prelude.<$>" (H.EVar dtNm)
+                $ H.EInfix "`Control.Exception.catch`"
+                (H.EInfix
+                      "Prelude.<$>"
+                      (H.EVar "Prelude.Right")
+                      "m")
+                  (H.EInfix "Prelude.." "Prelude.pure" "Prelude.Left")
+              ]
+            ]
+      | otherwise = do
+          retType <- maybe (pure tyUnit) gTypeReference (functionReturnType f)
+          pure $ H.InstDecl (H.InstHead [] "Pinch.Internal.RPC.ThriftResult" (H.TyCon dtNm))
+            [ H.TypeDecl (H.TyApp (H.TyCon "ResultType") [ H.TyCon dtNm ]) retType
+            , H.FunBind (
+               map (\e -> H.Match "unwrap" [H.PCon (dtNm <> "_" <> capitalize (fieldName e)) [H.PVar "x"]] (H.EApp "Control.Exception.throwIO" ["x"])) exceptions
+               ++ [ H.Match "unwrap"
+                      [H.PCon (dtNm <> "_Success") (H.PVar "x" <$ maybeToList (functionReturnType f))
+                      ]
+                      (H.EApp "Prelude.pure" (maybeToList $ ("x" <$ functionReturnType f) <|> pure "()"))
+                  ]
+              )
+            , H.FunBind
+              [ H.Match "wrap" ["m"]
+                ( H.EApp "Control.Exception.catches"
+                  [ H.EInfix
+                      (if isNothing (functionReturnType f) then "Prelude.<$" else "Prelude.<$>")
+                      (H.EVar $ dtNm <> "_Success")
+                      "m"
+                  , catchers
+                  ]
+                )
+              ]
+            ]
+
 
 tag, tyUnit, tyIO :: H.Type
 tag = H.TyCon $ "Tag"

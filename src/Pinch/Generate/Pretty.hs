@@ -42,6 +42,7 @@ data ImportNames
 data Decl
   = TypeDecl Type Type
   | DataDecl TypeName [ConDecl] [Deriving]
+  | NewtypeDecl TypeName Name NewtypeCon [Deriving]
   | InstDecl InstHead [Decl]
   | FunBind [Match]
   | TypeSigDecl Name Type
@@ -49,6 +50,11 @@ data Decl
 
 data Deriving
   = DeriveClass Type
+  deriving (Show)
+
+data NewtypeCon
+  = NewtypeConDecl Type
+  | NewtypeRecConDecl Name Type
   deriving (Show)
 
 data ConDecl
@@ -76,6 +82,7 @@ data Match = Match Name [Pat] Exp
 
 data Pat
   = PVar Name
+  | PWildcard
   | PLit Lit
   | PCon Name [Pat]
   deriving (Show)
@@ -144,10 +151,28 @@ instance Pretty Decl where
     InstDecl h decls -> (nest 2 $ vsep $ [ pretty h ] ++ map pretty decls) <> line
     FunBind ms -> vsep (map pretty ms) <> line
     TypeSigDecl n ty -> pretty n <+> "::" <+> pretty ty
+    NewtypeDecl tyName conName fields dervs -> nest 2 $ vsep 
+      [ "newtype" <+> pretty tyName
+      , "=" <+> pretty conName
+      , pretty fields
+      , prettyDerivings dervs
+      ] <> line
+
+instance Pretty NewtypeCon where
+  pretty decl = case decl of
+    NewtypeConDecl t -> pretty t
+    NewtypeRecConDecl conName t
+      -> prettyRecord [(conName, t)]
 
 prettyDerivings :: [Deriving] -> Doc a
 prettyDerivings [] = ""
 prettyDerivings ds = "deriving" <+> (parens $ cList $ map pretty ds)
+
+prettyRecord :: [(Name, Type)] -> Doc a
+prettyRecord fields = vsep ["{", pfields, "}"]
+  where
+    pfields = cList $ pfield <$> fields
+    pfield (f, v) = pretty f <+> "::" <+> pretty v
 
 instance Pretty Deriving where
   pretty (DeriveClass c) = pretty c
@@ -179,6 +204,7 @@ instance Pretty Pat where
     (PLit i) -> pretty i
     (PCon n []) -> pretty n
     (PCon n xs) -> parens $ pretty n <+> hsep (map pretty xs)
+    PWildcard -> "_"
 
 instance Pretty Exp where
   pretty e = case e of
