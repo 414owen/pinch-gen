@@ -149,6 +149,7 @@ gProgram s inp (Program headers defs) = do
       , H.ImportDecl (H.ModuleName "Data.ByteString") True H.IEverything
       , H.ImportDecl (H.ModuleName "Data.Int") True H.IEverything
       , H.ImportDecl (H.ModuleName "Data.Vector") True H.IEverything
+      , H.ImportDecl (H.ModuleName "GHC.Exts") True H.IEverything
       , H.ImportDecl (H.ModuleName "GHC.Generics") True H.IEverything
       , H.ImportDecl (H.ModuleName "Data.HashMap.Strict") True H.IEverything
       , H.ImportDecl (H.ModuleName "Data.HashSet") True H.IEverything
@@ -370,12 +371,26 @@ structDatatype nm fs = do
         ]
   settings <- asks cSettings
   let fieldParams = fields <&> (\(_, fname, _, _) -> "p" <> fname)
+  let destructure suffix = H.PVar . (<> suffix) <$> fieldParams
+  let fieldEq param = H.EApp (H.EVar "GHC.Exts.noinline")
+        [ H.EVar "(Prelude.==)"
+        , H.EVar $ param <> "_a"
+        , H.EVar $ param <> "_b"
+        ]
   pure $
     [ H.DataDecl nm
       [ H.RecConDecl nm (zip nms tys)
       ]
-      [ derivingEq, derivingShow ]
+      [ derivingShow ]
     , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
+    , H.InstDecl (H.InstHead [] "Prelude.Eq" (H.TyCon nm))
+      [ H.FunBind
+        [ H.Match "(==)" [H.PCon nm $ destructure "_a", H.PCon nm $ destructure "_b"]
+          $ case fieldParams of
+            [] -> H.EVar "Prelude.True"
+            (x : xs) -> foldl' (\acc field -> H.EInfix "Prelude.&&" acc $ fieldEq field) (fieldEq x) xs
+        ]
+      ]
     , H.InstDecl (H.InstHead [] clHashable (H.TyCon nm))
         [ H.FunBind
           [ H.Match "hashWithSalt" [H.PVar "s", (H.PCon nm $ H.PVar <$> fieldParams)] 
