@@ -389,7 +389,11 @@ structDatatype nm fs = do
       H.InstDecl (H.InstHead [] clNFData (H.TyCon nm)) [
         H.FunBind
           [ H.Match "rnf" [(H.PCon nm $ H.PVar <$> fieldParams)] 
-            $ foldl' (\acc fieldParam -> H.EApp (H.EVar "deepseq") [H.EVar fieldParam, acc]) (H.ELit H.LUnit) fieldParams
+            case fieldParams of
+              [] -> H.EUnit
+              (x : xs) -> foldl'
+                (\acc fieldParam -> H.EInfix (H.EVar "`seq`") (EApp "rnf" $ H.EVar fieldParam) acc)
+                (H.EApp "rnf" $ H.EVar x)
           ]
       ]
     ] else [

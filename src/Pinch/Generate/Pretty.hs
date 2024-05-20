@@ -87,6 +87,7 @@ data Pat
 
 data Exp
   = EVar Name
+  | EUnit
   | EApp Exp [Exp]
   | ELit Lit
   | ETyAnn Exp Type
@@ -213,6 +214,7 @@ instance Pretty Exp where
     ETuple es -> nest 2 $ tupled $ map pretty es
     ELet nm e1 e2 -> "let" <+> pretty nm <+> "=" <+> indent 2 (pretty e1) <+> "in" <+> pretty e2
     ETyApp e' tys -> pretty e' <+>  hsep (map (("@"<>) . parens . pretty) tys)
+    EUnit -> "()"
 
 instance Pretty Alt where
   pretty (Alt p e) = pretty p <+> "->" <+> pretty e
