@@ -534,9 +534,9 @@ gFunction f = do
           [ H.ELam [ "ctx", H.PCon argDataTyNm (map H.PVar argVars) ] (
               (if functionOneWay f then id else
                 (\c -> H.ETuple
-                  [ H.EApp (H.ETyApp "Pinch.Internal.RPC.wrap" [ resultDataTy ]) [c])
+                  [ H.EApp (H.ETyApp "Pinch.Internal.RPC.wrap" [ resultDataTy ]) [c]
                   , "Pinch.Transport.emptyHeaderData"
-                  ]
+                  ])
               )
               (H.EApp (H.EVar nm) (["server", "ctx"] ++ map H.EVar argVars))
             )
