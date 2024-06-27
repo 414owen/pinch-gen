@@ -117,6 +117,7 @@ gProgram s inp (Program headers defs) = do
       mkMod ".Client"
       ( [ impTypes
         , H.ImportDecl (H.ModuleName "Pinch.Client") True H.IEverything
+        , H.ImportDecl (H.ModuleName "Pinch.Transport") True H.IEverything
         ] ++ imports ++ defaultImports)
       (concat clientDecls)
     , -- server
@@ -522,6 +523,7 @@ gFunction f = do
         [ H.Match nm ( map (H.PVar . fieldName) $ A.functionParameters f)
           ( H.EApp (if functionOneWay f then "Pinch.Client.TOneway" else "Pinch.Client.TCall")
             [ H.ELit $ H.LString $ functionName f
+            , "Pinch.Transport.emptyHeaderData"
             , H.EApp (H.EVar argDataTyNm) $ map (H.EVar . fieldName) (A.functionParameters f)
             ]
           )
