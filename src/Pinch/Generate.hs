@@ -533,7 +533,10 @@ gFunction f = do
         , H.EApp (if functionOneWay f then "Pinch.Server.OnewayHandler" else "Pinch.Server.CallHandler")
           [ H.ELam [ "ctx", H.PCon argDataTyNm (map H.PVar argVars) ] (
               (if functionOneWay f then id else
-                (\c -> H.EApp (H.ETyApp "Pinch.Internal.RPC.wrap" [ resultDataTy ]) [c])
+                (\c -> H.ETuple
+                  [ H.EApp (H.ETyApp "Pinch.Internal.RPC.wrap" [ resultDataTy ]) [c])
+                  , "Pinch.Transport.emptyHeaderData"
+                  ]
               )
               (H.EApp (H.EVar nm) (["server", "ctx"] ++ map H.EVar argVars))
             )
