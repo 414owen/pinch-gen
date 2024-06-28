@@ -150,9 +150,9 @@ instance Pretty Decl where
     FunBind ms -> vsep (map pretty ms) <> line
     TypeSigDecl n ty -> pretty n <+> "::" <+> pretty ty
     ClosedTypeFamily name params matches ->
-      vsep
+      nest 2 $ vsep
         [ "type family" <+> pretty name <+> hsep (pretty <$> params)
-        , hang 2 $ vsep ((pretty name <+>) . prettyTyFamMatch <$> matches)
+        , vsep ((pretty name <+>) . prettyTyFamMatch <$> matches)
         ]
 
 prettyTyFamMatch :: (Pat, Exp) -> Doc a
