@@ -124,6 +124,7 @@ gProgram s inp (Program headers defs) = do
       mkMod ".Server"
       ( [ impTypes
         , H.ImportDecl (H.ModuleName "Pinch.Server") True H.IEverything
+        , H.ImportDecl (H.ModuleName "Pinch.Transport") True H.IEverything
         ] ++ imports ++ defaultImports)
       (concat serverDecls)
     ]
