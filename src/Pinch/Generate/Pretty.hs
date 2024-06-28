@@ -41,10 +41,11 @@ data ImportNames
 
 data Decl
   = TypeDecl Type Type
-  | DataDecl TypeName [ConDecl] [Deriving]
+  | DataDecl TypeName [Name] [ConDecl] [Deriving]
   | InstDecl InstHead [Decl]
   | FunBind [Match]
   | TypeSigDecl Name Type
+  | ClosedTypeFamily Name [Name] [(Pat, Exp)]
   deriving (Show)
 
 data Deriving
@@ -55,6 +56,9 @@ data ConDecl
   = ConDecl Name [Type]
   | RecConDecl Name [(Name, Type)]
   deriving (Show)
+
+instance IsString ConDecl where
+  fromString a = ConDecl (T.pack a) []
 
 data Type
   = TyApp Type [Type]
@@ -91,6 +95,7 @@ data Exp
   | EList [Exp]
   | ELam [Pat] Exp
   | ETuple [Exp]
+  | ETupleSection [Maybe Exp]
   | ELet Name Exp Exp
   | ETyApp Exp [Type]
   deriving (Show)
@@ -135,15 +140,23 @@ instance Pretty ImportNames where
 instance Pretty Decl where
   pretty decl = case decl of
     TypeDecl t1 t2 -> "type" <+> pretty t1 <+> "=" <+> pretty t2 <> line
-    DataDecl t [] ds -> "data" <+> pretty t <+> prettyDerivings ds <> line
-    DataDecl t (c:cs) ds -> nest 2 (vsep $
-        [ "data" <+> pretty t
+    DataDecl t typarams [] ds -> "data" <+> pretty t <+> hsep (pretty <$> typarams) <+> prettyDerivings ds <> line
+    DataDecl t typarams (c:cs) ds -> nest 2 (vsep $
+        [ "data" <+> pretty t <+> hsep (pretty <$> typarams)
         , "=" <+> pretty c
         ] ++ (map (\c' -> "|" <+> pretty c') cs) ++ [ prettyDerivings ds ]
       ) <> line
     InstDecl h decls -> (nest 2 $ vsep $ [ pretty h ] ++ map pretty decls) <> line
     FunBind ms -> vsep (map pretty ms) <> line
     TypeSigDecl n ty -> pretty n <+> "::" <+> pretty ty
+    ClosedTypeFamily name params matches ->
+      vsep
+        [ "type family" <+> pretty name <+> hsep (pretty <$> params)
+        , vsep (prettyTyFamMatch <$> matches)
+        ]
+
+prettyTyFamMatch :: (Pat, Exp) -> Doc a
+prettyTyFamMatch (pat, expr) = pretty pat <+> "=" <+> pretty expr
 
 prettyDerivings :: [Deriving] -> Doc a
 prettyDerivings [] = ""
@@ -194,6 +207,7 @@ instance Pretty Exp where
     ETuple es -> nest 2 $ tupled $ map pretty es
     ELet nm e1 e2 -> "let" <+> pretty nm <+> "=" <+> indent 2 (pretty e1) <+> "in" <+> pretty e2
     ETyApp e' tys -> pretty e' <+>  hsep (map (("@"<>) . parens . pretty) tys)
+    ETupleSection es -> hsep $ maybe mempty pretty <$> es
 
 instance Pretty Alt where
   pretty (Alt p e) = pretty p <+> "->" <+> pretty e
