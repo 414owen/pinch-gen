@@ -152,7 +152,7 @@ instance Pretty Decl where
     ClosedTypeFamily name params matches ->
       vsep
         [ "type family" <+> pretty name <+> hsep (pretty <$> params)
-        , vsep (prettyTyFamMatch <$> matches)
+        , nest 2 $ vsep ((pretty name <+>) . prettyTyFamMatch <$> matches)
         ]
 
 prettyTyFamMatch :: (Pat, Exp) -> Doc a
