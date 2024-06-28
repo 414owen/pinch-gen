@@ -252,7 +252,7 @@ gEnum :: A.Enum SourcePos -> GenerateM [H.Decl]
 gEnum e = do
   settings <- asks cSettings
   pure (
-    [ H.DataDecl tyName cons [ derivingEq, derivingOrd, derivingGenerics, derivingShow, derivingBounded ]
+    [ H.DataDecl tyName [] cons [ derivingEq, derivingOrd, derivingGenerics, derivingShow, derivingBounded ]
     , H.InstDecl (H.InstHead [] clPinchable (H.TyCon tyName))
       [ H.TypeDecl (H.TyApp tag [ H.TyCon tyName ]) (H.TyCon $ "Pinch.TEnum")
       , H.FunBind pinch'
@@ -358,7 +358,7 @@ structDatatype nm fs = do
         ]
   settings <- asks cSettings
   pure $
-    [ H.DataDecl nm
+    [ H.DataDecl nm []
       [ H.RecConDecl nm (zip nms tys)
       ]
       [ derivingEq, derivingGenerics, derivingShow ]
@@ -423,7 +423,7 @@ unionDatatype nm fs defCon = do
         ]
   settings <- asks cSettings
   pure $
-    [ H.DataDecl nm
+    [ H.DataDecl nm []
       cons
       [ derivingEq, derivingGenerics, derivingShow ]
       , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
@@ -445,7 +445,13 @@ gService :: Service SourcePos -> GenerateM ([H.Decl], [H.Decl], [H.Decl])
 gService s = do
   (nms, tys, handlers, calls, tyDecls) <- unzip5 <$> traverse gFunction (serviceFunctions s)
   let serverDecls =
-        [ H.DataDecl serviceTyName [ H.RecConDecl serviceConName $ zip nms tys ] []
+        [ H.DataDecl "APIVersion" [] ["Basic", "WithHeaders"] []
+        , H.ClosedTypeFamily "APIReturn" ["(a :: APIVersion)"]
+          [ (H.PCon "WithHeaders" [], H.ETuple ["a", "Pinch.Internal.HeaderData"])
+          , (H.PCon "Basic" [], "a")
+          ]
+        , H.DataDecl (serviceTyName <> "Generic") ["f"] [ H.RecConDecl serviceConName $ zip nms tys ] []
+        , H.DataDecl (serviceTyName <> "'") ["f"] [ H.RecConDecl serviceConName $ zip nms tys ] []
         , H.TypeSigDecl (prefix <> "_mkServer") (H.TyLam [H.TyCon serviceConName] (H.TyCon "Pinch.Server.ThriftServer"))
         , H.FunBind
           [ H.Match (prefix <> "_mkServer") [H.PVar "server"]
@@ -478,7 +484,7 @@ gFieldType f = do
 gFunction :: Function SourcePos -> GenerateM (H.Name, H.Type, H.Exp, [H.Decl], [H.Decl])
 gFunction f = do
   argTys <- traverse (fmap snd . gFieldType) (A.functionParameters f)
-  retType <- maybe (pure tyUnit) gTypeReference (functionReturnType f)
+  retType <- H.TyApp (H.TyCon "RetFam") . pure <$> maybe (pure tyUnit) gTypeReference (functionReturnType f)
 
 
   argDataTy <- structDatatype argDataTyNm (A.functionParameters f)
