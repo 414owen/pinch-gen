@@ -484,7 +484,7 @@ gFieldType f = do
 gFunction :: Function SourcePos -> GenerateM (H.Name, H.Type, H.Exp, [H.Decl], [H.Decl])
 gFunction f = do
   argTys <- traverse (fmap snd . gFieldType) (A.functionParameters f)
-  retType <- H.TyApp (H.TyCon "RetFam") . pure <$> maybe (pure tyUnit) gTypeReference (functionReturnType f)
+  retType <- maybe (pure tyUnit) gTypeReference (functionReturnType f)
 
 
   argDataTy <- structDatatype argDataTyNm (A.functionParameters f)
