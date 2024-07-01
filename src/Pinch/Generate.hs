@@ -523,8 +523,7 @@ gFunction f = do
         )
       pure ((thriftResultInst : dt), H.TyCon dtNm)
 
-
-  let srvFunTy = H.TyApp "RetFam" ["apiVersion", H.TyLam ([H.TyCon "Pinch.Server.Context"] ++ argTys) (H.TyApp tyIO [retType])]
+  let srvFunTy = H.TyLam ([H.TyCon "Pinch.Server.Context"] ++ argTys) $ H.TyApp tyIO [H.TyApp "RetFam" ["apiVersion", retType]]
   let clientFunTy = H.TyLam argTys (H.TyApp (H.TyCon "Pinch.Client.ThriftCall") [resultDataTy])
   let callSig = H.TypeSigDecl nm $ clientFunTy
   let call = H.FunBind
