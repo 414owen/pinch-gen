@@ -94,7 +94,7 @@ parseFromFile' :: FilePath -> IO (Either (E.ParseErrorBundle T.Text Void) (Progr
 parseFromFile' path = P.runParser thriftIDL path . decodeUtf8 <$> BS.readFile path
 
 apiVersionDecls :: [H.Decl]
-apiVersionDecls = 
+apiVersionDecls =
   [ H.DataDecl "APIVersion" [] ["Basic", "WithHeaders"] []
   , H.ClosedTypeFamily "APIReturn" ["(a :: APIVersion)", "r"]
     [ (["'WithHeaders", "r"], H.ETuple ["r", "Pinch.Transport.HeaderData"])
@@ -584,11 +584,7 @@ gFunction f = do
         , H.EApp (if functionOneWay f then "Pinch.Server.OnewayHandler" else "Pinch.Server.CallHandler")
           [ H.ELam [ "ctx", H.PCon argDataTyNm (map H.PVar argVars) ] (
               (if functionOneWay f then id else
-                (\c -> H.ETuple
-                  [ H.EApp (H.ETyApp "Pinch.Internal.RPC.wrap" [ resultDataTy ]) [c]
-                  , "Pinch.Transport.emptyHeaderData"
-                  ])
-              )
+                (H.EInfix "Prelude.<$>" "liftReturn") . (H.EApp (H.ETyApp "Pinch.Internal.RPC.wrap" [ resultDataTy ]) . pure))
               (H.EApp (H.EVar nm) (["server", "ctx"] ++ map H.EVar argVars))
             )
           ]
