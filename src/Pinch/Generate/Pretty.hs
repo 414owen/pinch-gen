@@ -45,7 +45,7 @@ data FunDep = FunDep Name Name
 data Decl
   = TypeDecl Type Type
   | DataDecl TypeName [Name] [ConDecl] [Deriving]
-  | ClassDecl Name [Name] [FunDep] [(Name, Type)]
+  | ClassDecl Name [Type] [FunDep] [(Name, Type)]
   | InstDecl InstHead [Decl]
   | FunBind [Match]
   | TypeSigDecl [Constraint] Name Type
@@ -69,6 +69,7 @@ data Type
   | TyCon TypeName
   | TyLam [Type] Type
   | TyTup [Type]
+  | TyAnn Type Type
   deriving (Show)
 
 instance IsString Type where
@@ -212,6 +213,7 @@ instance Pretty Type where
     TyCon t -> pretty t
     TyLam ts t -> concatWith (surround (space <> "->" <> space)) (map (parens . pretty) ts ++ [pretty t])
     TyTup els -> nest 2 $ tupled $ pretty <$> els
+    TyAnn a b -> hsep [pretty a, "::", pretty b]
 
 instance Pretty Match where
   pretty (Match n ps e) = pretty n <+> hsep (map pretty ps) <+> "=" <+> pretty e

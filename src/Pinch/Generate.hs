@@ -97,7 +97,7 @@ liftRetDecls :: [H.Decl]
 liftRetDecls = [classDecl, identInstanceDecl, tupleInstanceDecl]
   where
     classDecl :: H.Decl
-    classDecl = H.ClassDecl "LiftReturn" ["r", "r'"] [H.FunDep "r" "r'"]
+    classDecl = H.ClassDecl "LiftReturn" [H.TyAnn "apiVersion" "APIVersion", "r", "r'"] [H.FunDep "r" "r'"]
       [ ("liftReturn", H.TyLam ["r"] $ H.TyTup ["r'", "Pinch.Transport.HeaderData"])
       ]
 
