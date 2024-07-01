@@ -131,6 +131,7 @@ gProgram s inp (Program headers defs) = do
         , H.PragmaLanguage "TypeApplications"
         , H.PragmaLanguage "OverloadedStrings"
         , H.PragmaLanguage "FlexibleInstances"
+        , H.PragmaLanguage "FunctionalDependencies"
         , H.PragmaOptsGhc "-w"
         ]
   pure $
