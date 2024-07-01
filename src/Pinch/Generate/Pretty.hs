@@ -57,6 +57,10 @@ data TypeParam
   | TypeParamAnn Name Type
   deriving Show
 
+instance Pretty TypeParam where
+  pretty (TypeParam n) = pretty n
+  pretty (TypeParamAnn n t) = parens $ hsep [pretty n, "::", pretty t]
+
 instance IsString TypeParam where
   fromString = TypeParam . T.pack
 
