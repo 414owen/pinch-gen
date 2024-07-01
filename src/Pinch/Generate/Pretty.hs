@@ -173,7 +173,7 @@ instance Pretty ConDecl where
     where fields = cList $ map (\(f, v) -> pretty f <+> "::" <+> pretty v) args
 
 instance Pretty InstHead where
-  pretty (InstHead cs n ty) = "instance" <> prettyConstraints cs <+> pretty n <+> pretty ty <+> "where"
+  pretty (InstHead cs n ty) = "instance" <> prettyConstraints cs <+> pretty n <+> hsep (pretty <$> ty) <+> "where"
 
 prettyConstraints :: [Constraint] -> Doc ann
 prettyConstraints cs =
