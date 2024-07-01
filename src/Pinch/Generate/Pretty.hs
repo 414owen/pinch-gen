@@ -163,7 +163,7 @@ instance Pretty Decl where
         ] <> line
     ClassDecl className params fundeps methods ->
       hang 2 $ vsep $ (hsep $ concat
-        [ [pretty className]
+        [ ["class", pretty className]
         , pretty <$> params
         , if null fundeps
           then []
