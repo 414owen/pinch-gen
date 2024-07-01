@@ -456,7 +456,7 @@ gService s = do
         , H.TypeSigDecl
           [H.CClass "LiftRet" [H.TyCon serviceTyName, "a"]]
           (prefix <> "_mkServer")
-          $ H.TyLam [H.TyCon serviceConName] (H.TyCon "Pinch.Server.ThriftServer")
+          $ H.TyLam [H.TyApp (H.TyCon serviceTyName) ["a"]] (H.TyCon "Pinch.Server.ThriftServer")
         , H.FunBind
           [ H.Match (prefix <> "_mkServer") [H.PVar "server"]
             ( H.ELet "functions"
