@@ -467,6 +467,7 @@ gService :: Service SourcePos -> GenerateM ([H.Decl], [H.Decl], [H.Decl])
 gService s = do
   (nms, tys, handlers, calls, tyDecls) <- unzip5 <$> traverse gFunction (serviceFunctions s)
   let serverDecls =
+        liftRetDecls <>
         [ H.DataDecl "APIVersion" [] ["Basic", "WithHeaders"] []
         , H.ClosedTypeFamily "APIReturn" ["(a :: APIVersion)", "r"]
           [ (["'WithHeaders", "r"], H.ETuple ["r", "Pinch.Transport.HeaderData"])
@@ -476,7 +477,7 @@ gService s = do
         , H.TypeDecl (H.TyCon $ serviceTyName <> "'") $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'WithHeaders"]
         , H.TypeDecl (H.TyCon $ serviceTyName <> "") $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Basic"]
         , H.TypeSigDecl
-          [H.CClass "LiftRet" [H.TyCon serviceTyName, "a"]]
+          [H.CClass "LiftReturn" [H.TyCon serviceTyName, "a"]]
           (prefix <> "_mkServer")
           $ H.TyLam [H.TyApp (H.TyCon serviceTyName) ["a"]] (H.TyCon "Pinch.Server.ThriftServer")
         , H.FunBind
