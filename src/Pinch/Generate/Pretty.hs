@@ -39,9 +39,13 @@ data ImportNames
   | IJust [ Name ]
   deriving (Show)
 
+data FunDep = FunDep Name Name
+  deriving Show
+
 data Decl
   = TypeDecl Type Type
   | DataDecl TypeName [Name] [ConDecl] [Deriving]
+  | ClassDecl Name [Name] [FunDep] [(Name, Type)]
   | InstDecl InstHead [Decl]
   | FunBind [Match]
   | TypeSigDecl [Constraint] Name Type
@@ -64,6 +68,7 @@ data Type
   = TyApp Type [Type]
   | TyCon TypeName
   | TyLam [Type] Type
+  | TyTup [Type]
   deriving (Show)
 
 instance IsString Type where
@@ -156,6 +161,21 @@ instance Pretty Decl where
         [ "type family" <+> pretty name <+> hsep (pretty <$> params) <+> "where"
         , vsep ((pretty name <+>) . prettyTyFamMatch <$> matches)
         ] <> line
+    ClassDecl className params fundeps methods ->
+      hang 2 $ vsep $ (hsep $ concat
+        [ [pretty className]
+        , pretty <$> params
+        , if null fundeps
+          then []
+          else ["|", concatWith (\a b -> a <> "," <+> b) $ pretty <$> fundeps]
+        , ["where"]
+        ]) : fmap prettyClassMethod methods
+
+prettyClassMethod :: (Name, Type) -> Doc a
+prettyClassMethod (name, t) = hsep [pretty name, "::", pretty t]
+
+instance Pretty FunDep where
+  pretty (FunDep a b) = hsep [pretty a, "->", pretty b]
 
 prettyTyFamMatch :: ([Pat], Exp) -> Doc a
 prettyTyFamMatch (pats, expr) = hsep (pretty <$> pats) <+> "=" <+> pretty expr
@@ -191,6 +211,7 @@ instance Pretty Type where
     TyApp t1 ts -> parens $ pretty t1 <+> hsep (map pretty ts)
     TyCon t -> pretty t
     TyLam ts t -> concatWith (surround (space <> "->" <> space)) (map (parens . pretty) ts ++ [pretty t])
+    TyTup els -> nest 2 $ tupled $ pretty <$> els
 
 instance Pretty Match where
   pretty (Match n ps e) = pretty n <+> hsep (map pretty ps) <+> "=" <+> pretty e

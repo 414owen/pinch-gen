@@ -93,7 +93,29 @@ loadFile inp = do
 parseFromFile' :: FilePath -> IO (Either (E.ParseErrorBundle T.Text Void) (Program SourcePos))
 parseFromFile' path = P.runParser thriftIDL path . decodeUtf8 <$> BS.readFile path
 
+liftRetDecls :: [H.Decl]
+liftRetDecls = [classDecl, identInstanceDecl, tupleInstanceDecl]
+  where
+    classDecl :: H.Decl
+    classDecl = H.ClassDecl "LiftReturn" ["r", "r'"] [H.FunDep "r" "r'"]
+      [ ("liftReturn", H.TyLam ["r"] $ H.TyTup ["r'", "Pinch.Transport.HeaderData"])
+      ]
 
+    tupleInstanceDecl :: H.Decl
+    tupleInstanceDecl
+      = H.InstDecl (H.InstHead [] "LiftReturn" [H.TyTup ["r", "Pinch.Transport.HeaderData"], "r"])
+      [ H.FunBind
+        [ H.Match "liftReturn" [] "id"
+        ]
+      ]
+
+    identInstanceDecl :: H.Decl
+    identInstanceDecl
+      = H.InstDecl (H.InstHead [] "LiftReturn" [H.TyTup ["r", "Pinch.Transport.HeaderData"], "r"])
+      [ H.FunBind
+        [ H.Match "liftReturn" [] "id"
+        ]
+      ]
 
 gProgram :: Settings -> FilePath -> Program SourcePos -> IO [H.Module]
 gProgram s inp (Program headers defs) = do
