@@ -453,7 +453,10 @@ gService s = do
         , H.DataDecl (serviceTyName <> "Generic") ["(apiVersion :: APIVersion)"] [ H.RecConDecl serviceConName $ zip nms tys ] []
         , H.TypeDecl (H.TyCon $ serviceTyName <> "'") $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'WithHeaders"]
         , H.TypeDecl (H.TyCon $ serviceTyName <> "") $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Basic"]
-        , H.TypeSigDecl (prefix <> "_mkServer") (H.TyLam [H.TyCon serviceConName] (H.TyCon "Pinch.Server.ThriftServer"))
+        , H.TypeSigDecl
+          [H.CClass "LiftRet" [H.TyCon serviceTyName, "a"]]
+          (prefix <> "_mkServer")
+          $ H.TyLam [H.TyCon serviceConName] (H.TyCon "Pinch.Server.ThriftServer")
         , H.FunBind
           [ H.Match (prefix <> "_mkServer") [H.PVar "server"]
             ( H.ELet "functions"

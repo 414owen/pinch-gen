@@ -44,7 +44,7 @@ data Decl
   | DataDecl TypeName [Name] [ConDecl] [Deriving]
   | InstDecl InstHead [Decl]
   | FunBind [Match]
-  | TypeSigDecl Name Type
+  | TypeSigDecl [Constraint] Name Type
   | ClosedTypeFamily Name [Name] [([Pat], Exp)]
   deriving (Show)
 
@@ -70,11 +70,11 @@ instance IsString Type where
   fromString = TyCon . T.pack
 
 data InstHead
-  = InstHead [Constraint] ClassName Type
+  = InstHead [Constraint] ClassName [Type]
   deriving (Show)
 
 data Constraint
-  = CClass ClassName Type
+  = CClass ClassName [Type]
   deriving (Show)
 
 data Match = Match Name [Pat] Exp
@@ -150,7 +150,7 @@ instance Pretty Decl where
       ) <> line
     InstDecl h decls -> (nest 2 $ vsep $ [ pretty h ] ++ map pretty decls) <> line
     FunBind ms -> vsep (map pretty ms) <> line
-    TypeSigDecl n ty -> pretty n <+> "::" <+> pretty ty <> line
+    TypeSigDecl constraints n ty -> pretty n <+> "::" <> prettyConstraints constraints <+> pretty ty <> line
     ClosedTypeFamily name params matches ->
       nest 2 $ vsep
         [ "type family" <+> pretty name <+> hsep (pretty <$> params) <+> "where"
@@ -173,8 +173,11 @@ instance Pretty ConDecl where
     where fields = cList $ map (\(f, v) -> pretty f <+> "::" <+> pretty v) args
 
 instance Pretty InstHead where
-  pretty (InstHead cs n ty) = "instance" <> context <+> pretty n <+> pretty ty <+> "where"
-    where context = if null cs then "" else space <> parens (cList $ map pretty cs) <+> "=>" <+> pretty n <+> pretty ty <+> "where"
+  pretty (InstHead cs n ty) = "instance" <> prettyConstraints cs <+> pretty n <+> pretty ty <+> "where"
+    <+> "=>" <+> pretty n <+> pretty ty <+> "where"
+
+prettyConstraints :: [Constraint] -> Doc ann
+prettyConstraints cs = (if null cs then "" else space) <> parens (cList $ map pretty cs)
 
 instance Pretty Constraint where
   pretty (CClass cl n) = pretty cl <+> pretty n
