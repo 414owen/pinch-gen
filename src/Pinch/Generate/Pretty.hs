@@ -45,7 +45,7 @@ data Decl
   | InstDecl InstHead [Decl]
   | FunBind [Match]
   | TypeSigDecl Name Type
-  | ClosedTypeFamily Name [Name] [(Pat, Exp)]
+  | ClosedTypeFamily Name [Name] [([Pat], Exp)]
   deriving (Show)
 
 data Deriving

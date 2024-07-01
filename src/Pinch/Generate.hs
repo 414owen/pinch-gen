@@ -447,8 +447,8 @@ gService s = do
   let serverDecls =
         [ H.DataDecl "APIVersion" [] ["Basic", "WithHeaders"] []
         , H.ClosedTypeFamily "APIReturn" ["(a :: APIVersion)", "r"]
-          [ (H.PCon "'WithHeaders" ["r"], H.ETuple ["r", "Pinch.Transport.HeaderData"])
-          , (H.PCon "'Basic" ["r"], "r")
+          [ (["'WithHeaders", "r"], H.ETuple ["r", "Pinch.Transport.HeaderData"])
+          , (["'Basic", "r"], "r")
           ]
         , H.DataDecl (serviceTyName <> "Generic") ["(apiVersion :: APIVersion)"] [ H.RecConDecl serviceConName $ zip nms tys ] []
         , H.TypeDecl (H.TyCon $ serviceTyName <> "'") $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'WithHeaders"]
