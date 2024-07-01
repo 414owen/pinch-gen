@@ -217,7 +217,7 @@ prettyConstraints cs =
 instance Pretty Constraint where
   pretty (CClass cl []) = pretty cl
   pretty (CClass cl [t]) = pretty cl <+> pretty t
-  pretty (CClass cl ts) = pretty cl <+> parens (hsep (pretty <$> ts))
+  pretty (CClass cl ts) = pretty cl <+> hsep (pretty <$> ts)
 
 instance Pretty Type where
   pretty ty = case ty of
