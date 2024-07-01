@@ -66,6 +66,8 @@ data Type
   | TyLam [Type] Type
   deriving (Show)
 
+instance IsString Type where
+  fromString = TyCon . T.pack
 
 data InstHead
   = InstHead [Constraint] ClassName Type
