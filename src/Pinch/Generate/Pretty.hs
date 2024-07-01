@@ -175,7 +175,7 @@ instance Pretty Decl where
         , vsep ((pretty name <+>) . prettyTyFamMatch <$> matches)
         ] <> line
     ClassDecl className params fundeps methods ->
-      hang 2 $ vsep $ (hsep $ concat
+      (<> line) $ hang 2 $ vsep $ (hsep $ concat
         [ ["class", pretty className]
         , pretty <$> params
         , if null fundeps

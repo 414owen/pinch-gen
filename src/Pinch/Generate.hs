@@ -161,7 +161,7 @@ gProgram s inp (Program headers defs) = do
         , H.ImportDecl (H.ModuleName "Pinch.Server") True H.IEverything
         , H.ImportDecl (H.ModuleName "Pinch.Transport") True H.IEverything
         ] ++ imports ++ defaultImports)
-      (concat serverDecls)
+      (liftRetDecls <> concat serverDecls)
     ]
 
   where
@@ -480,7 +480,6 @@ gService :: Service SourcePos -> GenerateM ([H.Decl], [H.Decl], [H.Decl])
 gService s = do
   (nms, tys, handlers, calls, tyDecls) <- unzip5 <$> traverse gFunction (serviceFunctions s)
   let serverDecls =
-        liftRetDecls <>
         [ H.DataDecl "APIVersion" [] ["Basic", "WithHeaders"] []
         , H.ClosedTypeFamily "APIReturn" ["(a :: APIVersion)", "r"]
           [ (["'WithHeaders", "r"], H.ETuple ["r", "Pinch.Transport.HeaderData"])
