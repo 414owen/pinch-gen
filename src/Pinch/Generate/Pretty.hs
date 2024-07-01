@@ -157,8 +157,8 @@ instance Pretty Decl where
         , vsep ((pretty name <+>) . prettyTyFamMatch <$> matches)
         ]
 
-prettyTyFamMatch :: (Pat, Exp) -> Doc a
-prettyTyFamMatch (pat, expr) = pretty pat <+> "=" <+> pretty expr
+prettyTyFamMatch :: ([Pat], Exp) -> Doc a
+prettyTyFamMatch (pats, expr) = hsep (pretty <$> pats) <+> "=" <+> pretty expr
 
 prettyDerivings :: [Deriving] -> Doc a
 prettyDerivings [] = ""
