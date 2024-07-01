@@ -97,13 +97,16 @@ liftRetDecls :: [H.Decl]
 liftRetDecls = [classDecl, identInstanceDecl, tupleInstanceDecl]
   where
     classDecl :: H.Decl
-    classDecl = H.ClassDecl "LiftReturn" [H.TypeParamAnn "apiVersion" "APIVersion", "r", "r'"] [H.FunDep "r" "r'"]
+    classDecl = H.ClassDecl "LiftReturn" [H.TypeParamAnn "apiVersion" "APIVersion", "r", "r'"]
+      [ H.FunDep "apiVersion" "r"
+      , H.FunDep "apiVersion" "r'"
+      ]
       [ ("liftReturn", H.TyLam ["r"] $ H.TyTup ["r'", "Pinch.Transport.HeaderData"])
       ]
 
     tupleInstanceDecl :: H.Decl
     tupleInstanceDecl
-      = H.InstDecl (H.InstHead [] "LiftReturn" [H.TyTup ["r", "Pinch.Transport.HeaderData"], "r"])
+      = H.InstDecl (H.InstHead [] "LiftReturn" ["Basic", H.TyTup ["r", "Pinch.Transport.HeaderData"], "r"])
       [ H.FunBind
         [ H.Match "liftReturn" [] "id"
         ]
@@ -111,9 +114,9 @@ liftRetDecls = [classDecl, identInstanceDecl, tupleInstanceDecl]
 
     identInstanceDecl :: H.Decl
     identInstanceDecl
-      = H.InstDecl (H.InstHead [] "LiftReturn" [H.TyTup ["r", "Pinch.Transport.HeaderData"], "r"])
+      = H.InstDecl (H.InstHead [] "LiftReturn" ["WithHeaders", "r", "r"])
       [ H.FunBind
-        [ H.Match "liftReturn" [] "id"
+        [ H.Match "liftReturn" [] $ H.ETupleSection [Nothing, Just "Pinch.Transport.emptyHeaderData"]
         ]
       ]
 
