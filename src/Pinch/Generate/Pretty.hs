@@ -181,9 +181,10 @@ prettyConstraints cs =
   then ""
   else space <> parens (cList $ map pretty cs) <+> "=>"
 
-
 instance Pretty Constraint where
-  pretty (CClass cl n) = pretty cl <+> pretty n
+  pretty (CClass cl []) = pretty cl
+  pretty (CClass cl [t]) = pretty cl <+> pretty t
+  pretty (CClass cl ts) = pretty cl <+> parens (hsep (pretty <$> ts))
 
 instance Pretty Type where
   pretty ty = case ty of
