@@ -155,7 +155,7 @@ instance Pretty Decl where
       nest 2 $ vsep
         [ "type family" <+> pretty name <+> hsep (pretty <$> params) <+> "where"
         , vsep ((pretty name <+>) . prettyTyFamMatch <$> matches)
-        ]
+        ] <> line
 
 prettyTyFamMatch :: ([Pat], Exp) -> Doc a
 prettyTyFamMatch (pats, expr) = hsep (pretty <$> pats) <+> "=" <+> pretty expr

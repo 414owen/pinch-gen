@@ -102,7 +102,7 @@ gProgram s inp (Program headers defs) = do
   let tyMap = Map.unions tyMaps
   let (typeDecls, clientDecls, serverDecls) = unzip3 $ runReader (traverse gDefinition defs) $ Context tyMap s
   let mkMod suffix = H.Module (H.ModuleName $ modBaseName <> suffix)
-        [ H.PragmaLanguage "TypeFamilies, DeriveGeneric, TypeApplications, OverloadedStrings"
+        [ H.PragmaLanguage "DataKinds, TypeFamilies, DeriveGeneric, TypeApplications, OverloadedStrings"
         , H.PragmaOptsGhc "-w" ]
   pure $
     [ -- types
