@@ -45,12 +45,20 @@ data FunDep = FunDep Name Name
 data Decl
   = TypeDecl Type Type
   | DataDecl TypeName [Name] [ConDecl] [Deriving]
-  | ClassDecl Name [Type] [FunDep] [(Name, Type)]
+  | ClassDecl Name [TypeParam] [FunDep] [(Name, Type)]
   | InstDecl InstHead [Decl]
   | FunBind [Match]
   | TypeSigDecl [Constraint] Name Type
   | ClosedTypeFamily Name [Name] [([Pat], Exp)]
   deriving (Show)
+
+data TypeParam
+  = TypeParam Name
+  | TypeParamAnn Name Type
+  deriving Show
+
+instance IsString TypeParam where
+  fromString = TypeParam . T.pack
 
 data Deriving
   = DeriveClass Type

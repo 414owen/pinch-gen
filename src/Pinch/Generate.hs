@@ -97,7 +97,7 @@ liftRetDecls :: [H.Decl]
 liftRetDecls = [classDecl, identInstanceDecl, tupleInstanceDecl]
   where
     classDecl :: H.Decl
-    classDecl = H.ClassDecl "LiftReturn" [H.TyAnn "apiVersion" "APIVersion", "r", "r'"] [H.FunDep "r" "r'"]
+    classDecl = H.ClassDecl "LiftReturn" [H.TypeParamAnn "apiVersion" "APIVersion", "r", "r'"] [H.FunDep "r" "r'"]
       [ ("liftReturn", H.TyLam ["r"] $ H.TyTup ["r'", "Pinch.Transport.HeaderData"])
       ]
 
@@ -116,6 +116,7 @@ liftRetDecls = [classDecl, identInstanceDecl, tupleInstanceDecl]
         [ H.Match "liftReturn" [] "id"
         ]
       ]
+
 
 gProgram :: Settings -> FilePath -> Program SourcePos -> IO [H.Module]
 gProgram s inp (Program headers defs) = do
