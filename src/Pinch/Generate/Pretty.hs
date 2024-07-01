@@ -150,7 +150,7 @@ instance Pretty Decl where
       ) <> line
     InstDecl h decls -> (nest 2 $ vsep $ [ pretty h ] ++ map pretty decls) <> line
     FunBind ms -> vsep (map pretty ms) <> line
-    TypeSigDecl n ty -> pretty n <+> "::" <+> pretty ty
+    TypeSigDecl n ty -> pretty n <+> "::" <+> pretty ty <> line
     ClosedTypeFamily name params matches ->
       nest 2 $ vsep
         [ "type family" <+> pretty name <+> hsep (pretty <$> params) <+> "where"
