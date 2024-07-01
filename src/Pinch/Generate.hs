@@ -447,7 +447,7 @@ gService s = do
   let serverDecls =
         [ H.DataDecl "APIVersion" [] ["Basic", "WithHeaders"] []
         , H.ClosedTypeFamily "APIReturn" ["(a :: APIVersion)", "r"]
-          [ (H.PCon "'WithHeaders" ["r"], H.ETuple ["r", "Pinch.Internal.HeaderData"])
+          [ (H.PCon "'WithHeaders" ["r"], H.ETuple ["r", "Pinch.Transport.HeaderData"])
           , (H.PCon "'Basic" ["r"], "r")
           ]
         , H.DataDecl (serviceTyName <> "Generic") ["(apiVersion :: APIVersion)"] [ H.RecConDecl serviceConName $ zip nms tys ] []
@@ -523,7 +523,7 @@ gFunction f = do
         )
       pure ((thriftResultInst : dt), H.TyCon dtNm)
 
-  let srvFunTy = H.TyLam ([H.TyCon "Pinch.Server.Context"] ++ argTys) $ H.TyApp tyIO [H.TyApp "RetFam" ["apiVersion", retType]]
+  let srvFunTy = H.TyLam ([H.TyCon "Pinch.Server.Context"] ++ argTys) $ H.TyApp tyIO [H.TyApp "APIReturn" ["apiVersion", retType]]
   let clientFunTy = H.TyLam argTys (H.TyApp (H.TyCon "Pinch.Client.ThriftCall") [resultDataTy])
   let callSig = H.TypeSigDecl nm $ clientFunTy
   let call = H.FunBind
