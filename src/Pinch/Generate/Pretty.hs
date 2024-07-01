@@ -174,10 +174,13 @@ instance Pretty ConDecl where
 
 instance Pretty InstHead where
   pretty (InstHead cs n ty) = "instance" <> prettyConstraints cs <+> pretty n <+> pretty ty <+> "where"
-    <+> "=>" <+> pretty n <+> pretty ty <+> "where"
 
 prettyConstraints :: [Constraint] -> Doc ann
-prettyConstraints cs = (if null cs then "" else space) <> parens (cList $ map pretty cs)
+prettyConstraints cs =
+  if null cs
+  then ""
+  else space <> parens (cList $ map pretty cs) <+> "=>"
+
 
 instance Pretty Constraint where
   pretty (CClass cl n) = pretty cl <+> pretty n
