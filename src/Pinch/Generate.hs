@@ -130,6 +130,7 @@ gProgram s inp (Program headers defs) = do
         , H.PragmaLanguage "DeriveGeneric"
         , H.PragmaLanguage "TypeApplications"
         , H.PragmaLanguage "OverloadedStrings"
+        , H.PragmaLanguage "FlexibleInstances"
         , H.PragmaOptsGhc "-w"
         ]
   pure $
