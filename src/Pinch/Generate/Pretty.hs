@@ -151,7 +151,7 @@ instance Pretty Decl where
     TypeSigDecl n ty -> pretty n <+> "::" <+> pretty ty
     ClosedTypeFamily name params matches ->
       nest 2 $ vsep
-        [ "type family" <+> pretty name <+> hsep (pretty <$> params)
+        [ "type family" <+> pretty name <+> hsep (pretty <$> params) <+> "where"
         , vsep ((pretty name <+>) . prettyTyFamMatch <$> matches)
         ]
 
