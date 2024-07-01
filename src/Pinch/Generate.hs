@@ -184,7 +184,7 @@ gConst constPos = do
   tyRef <- gTypeReference (constValueType constPos)
   value <- gConstValue (constValue constPos)
   pure
-    [ H.TypeSigDecl name tyRef
+    [ H.TypeSigDecl [] name tyRef
     , H.FunBind [H.Match name [] value]
     ]
   where
@@ -253,23 +253,23 @@ gEnum e = do
   settings <- asks cSettings
   pure (
     [ H.DataDecl tyName [] cons [ derivingEq, derivingOrd, derivingGenerics, derivingShow, derivingBounded ]
-    , H.InstDecl (H.InstHead [] clPinchable (H.TyCon tyName))
+    , H.InstDecl (H.InstHead [] clPinchable [H.TyCon tyName])
       [ H.TypeDecl (H.TyApp tag [ H.TyCon tyName ]) (H.TyCon $ "Pinch.TEnum")
       , H.FunBind pinch'
       , H.FunBind [unpinch']
       ]
-    , H.InstDecl (H.InstHead [] "Prelude.Enum" (H.TyCon tyName))
+    , H.InstDecl (H.InstHead [] "Prelude.Enum" [H.TyCon tyName])
       [ H.FunBind fromEnum'
       , H.FunBind (toEnum' ++ [toEnumDef])
       ]
-    , H.InstDecl (H.InstHead [] clHashable (H.TyCon tyName)) []
+    , H.InstDecl (H.InstHead [] clHashable [H.TyCon tyName]) []
     ] ++ (if sGenerateArbitrary settings then [
-      H.InstDecl (H.InstHead [] clArbitrary (H.TyCon tyName)) [
+      H.InstDecl (H.InstHead [] clArbitrary [H.TyCon tyName]) [
         H.FunBind [ arbitrary ]
       ]
     ] else [])
     ++ (if sGenerateNFData settings then [
-      H.InstDecl (H.InstHead [] clNFData (H.TyCon tyName)) []
+      H.InstDecl (H.InstHead [] clNFData [H.TyCon tyName]) []
     ] else []))
   where
     tyName = enumName e
@@ -315,8 +315,8 @@ gStruct s = case structKind s of
   ExceptionKind -> (++ [hashable, ex]) <$>  structDatatype tyName (structFields s)
   where
     tyName = structName s
-    hashable = H.InstDecl (H.InstHead [] clHashable (H.TyCon tyName)) []
-    ex = H.InstDecl (H.InstHead [] clException (H.TyCon tyName)) []
+    hashable = H.InstDecl (H.InstHead [] clHashable [H.TyCon tyName]) []
+    ex = H.InstDecl (H.InstHead [] clException [H.TyCon tyName]) []
 
 
 structDatatype :: T.Text -> [Field SourcePos] -> GenerateM [H.Decl]
@@ -362,12 +362,12 @@ structDatatype nm fs = do
       [ H.RecConDecl nm (zip nms tys)
       ]
       [ derivingEq, derivingGenerics, derivingShow ]
-    , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
+    , H.InstDecl (H.InstHead [] clPinchable [H.TyCon nm]) [ stag, pinch, unpinch ]
     ] ++ (if sGenerateArbitrary settings then [
-      H.InstDecl (H.InstHead [] clArbitrary (H.TyCon nm)) [ arbitrary ]
+      H.InstDecl (H.InstHead [] clArbitrary [H.TyCon nm]) [ arbitrary ]
     ] else [])
       ++ (if sGenerateNFData settings then [
-      H.InstDecl (H.InstHead [] clNFData (H.TyCon nm)) []
+      H.InstDecl (H.InstHead [] clNFData [H.TyCon nm]) []
     ] else [])
 
 data ServiceResultCon = SRCNone | SRCVoid H.Name
@@ -426,12 +426,12 @@ unionDatatype nm fs defCon = do
     [ H.DataDecl nm []
       cons
       [ derivingEq, derivingGenerics, derivingShow ]
-      , H.InstDecl (H.InstHead [] clPinchable (H.TyCon nm)) [ stag, pinch, unpinch ]
+      , H.InstDecl (H.InstHead [] clPinchable [H.TyCon nm]) [ stag, pinch, unpinch ]
     ] ++ (if sGenerateArbitrary settings then [
-      H.InstDecl (H.InstHead [] clArbitrary (H.TyCon nm)) [ arbitrary ]
+      H.InstDecl (H.InstHead [] clArbitrary [H.TyCon nm]) [ arbitrary ]
     ] else [])
     ++ (if sGenerateNFData settings then [
-      H.InstDecl (H.InstHead [] clNFData (H.TyCon nm)) []
+      H.InstDecl (H.InstHead [] clNFData [H.TyCon nm]) []
     ] else [])
 
 gField :: T.Text -> (Integer, Field SourcePos) -> GenerateM (Integer, H.Name, H.Type, Bool)
@@ -501,7 +501,7 @@ gFunction f = do
   (resultDecls, resultDataTy) <- case (functionReturnType f, exceptions) of
     (Nothing, []) -> pure ([], H.TyCon $ if functionOneWay f then "()" else "Pinch.Internal.RPC.Unit")
     _ -> do
-      let thriftResultInst = H.InstDecl (H.InstHead [] "Pinch.Internal.RPC.ThriftResult" (H.TyCon dtNm))
+      let thriftResultInst = H.InstDecl (H.InstHead [] "Pinch.Internal.RPC.ThriftResult" [H.TyCon dtNm])
             [ H.TypeDecl (H.TyApp (H.TyCon "ResultType") [ H.TyCon dtNm ]) retType
             , H.FunBind (
                map (\e -> H.Match "unwrap" [H.PCon (dtNm <> "_" <> capitalize (fieldName e)) [H.PVar "x"]] (H.EApp "Control.Exception.throwIO" ["x"])) exceptions
@@ -528,7 +528,7 @@ gFunction f = do
 
   let srvFunTy = H.TyLam ([H.TyCon "Pinch.Server.Context"] ++ argTys) $ H.TyApp tyIO [H.TyApp "APIReturn" ["apiVersion", retType]]
   let clientFunTy = H.TyLam argTys (H.TyApp (H.TyCon "Pinch.Client.ThriftCall") [resultDataTy])
-  let callSig = H.TypeSigDecl nm $ clientFunTy
+  let callSig = H.TypeSigDecl [] nm $ clientFunTy
   let call = H.FunBind
         [ H.Match nm ( map (H.PVar . fieldName) $ A.functionParameters f)
           ( H.EApp (if functionOneWay f then "Pinch.Client.TOneway" else "Pinch.Client.TCall")
