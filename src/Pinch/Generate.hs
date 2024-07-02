@@ -118,7 +118,7 @@ liftRetDecls = [classDecl, identInstanceDecl, tupleInstanceDecl]
     tupleInstanceDecl
       = H.InstDecl (H.InstHead [] "LiftReturn" ["Basic", H.TyTup ["r", "Pinch.Transport.HeaderData"], "r"])
       [ H.FunBind
-        [ H.Match "liftReturn" [] "id"
+        [ H.Match "liftReturn" [] "Prelude.id"
         ]
       ]
 

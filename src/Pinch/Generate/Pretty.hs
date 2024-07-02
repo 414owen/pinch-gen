@@ -170,9 +170,11 @@ instance Pretty Decl where
       ) <> line
     InstDecl h decls -> (nest 2 $ vsep $ [ pretty h ] ++ map pretty decls) <> line
     FunBind ms -> vsep (map pretty ms) <> line
-    TypeSigDecl constraints n ty -> nest 2 $ pretty n <+> "::"
-      <+> prettyForall (concatMap constraintTypeVars constraints <> collectTypeVars ty)
-      <+> prettyConstraints constraints <+> pretty ty <> line
+    TypeSigDecl constraints n ty -> nest 2 $ hsep $ concat
+        [ [pretty n , "::"]
+        , prettyForall (concatMap constraintTypeVars constraints <> collectTypeVars ty)
+        , [prettyConstraints constraints <+> pretty ty <> line]
+        ]
     ClosedTypeFamily name params matches ->
       nest 2 $ vsep
         [ "type family" <+> pretty name <+> hsep (pretty <$> params) <+> "where"
@@ -188,9 +190,10 @@ instance Pretty Decl where
         , ["where"]
         ]) : fmap prettyClassMethod methods
 
-prettyForall :: [Name] -> Doc a
-prettyForall [] = mempty
-prettyForall vars = (<> ".") $ hsep $ "forall" : fmap pretty (nub vars)
+prettyForall :: [Name] -> [Doc a]
+prettyForall vars = case filter (not . T.null) vars of
+  [] -> []
+  vars' -> [(<> ".") $ hsep $ "forall" : fmap pretty (nub vars')]
 
 constraintTypeVars :: Constraint -> [Name]
 constraintTypeVars (CClass _ ts) = concatMap collectTypeVars ts
@@ -271,7 +274,7 @@ instance Pretty Exp where
     ETuple es -> nest 2 $ tupled $ map pretty es
     ELet nm e1 e2 -> "let" <+> pretty nm <+> "=" <+> indent 2 (pretty e1) <+> "in" <+> pretty e2
     ETyApp e' tys -> pretty e' <+>  hsep (map (("@"<>) . parens . pretty) tys)
-    ETupleSection es -> hsep $ maybe mempty pretty <$> es
+    ETupleSection es -> tupled $ maybe mempty pretty <$> es
 
 instance Pretty Alt where
   pretty (Alt p e) = pretty p <+> "->" <+> pretty e
