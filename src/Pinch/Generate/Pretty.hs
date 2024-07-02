@@ -8,6 +8,7 @@ import           Data.String
 import qualified Data.Text                 as T
 import           Prelude hiding (mod)
 import           Prettyprinter
+import Data.List (nub)
 
 newtype ModuleName = ModuleName T.Text
   deriving (Show)
@@ -189,7 +190,7 @@ instance Pretty Decl where
 
 prettyForall :: [Name] -> Doc a
 prettyForall [] = mempty
-prettyForall vars = (<> ".") $ hsep $ "forall" : fmap pretty vars
+prettyForall vars = (<> ".") $ hsep $ "forall" : fmap pretty (nub vars)
 
 constraintTypeVars :: Constraint -> [Name]
 constraintTypeVars (CClass _ ts) = concatMap collectTypeVars ts
