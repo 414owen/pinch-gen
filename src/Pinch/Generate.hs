@@ -147,6 +147,7 @@ gProgram s inp (Program headers defs) = do
         , H.PragmaLanguage "OverloadedStrings"
         , H.PragmaLanguage "RankNTypes"
         , H.PragmaLanguage "ScopedTypeVariables"
+        , H.PragmaLanguage "TupleSections"
         , H.PragmaLanguage "TypeApplications"
         , H.PragmaLanguage "TypeFamilies"
         , H.PragmaOptsGhc "-w"
