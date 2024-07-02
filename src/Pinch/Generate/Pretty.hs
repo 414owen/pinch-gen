@@ -3,6 +3,7 @@
 
 module Pinch.Generate.Pretty where
 
+import qualified Data.Char                 as Char
 import           Data.String
 import qualified Data.Text                 as T
 import           Prelude hiding (mod)
@@ -168,7 +169,9 @@ instance Pretty Decl where
       ) <> line
     InstDecl h decls -> (nest 2 $ vsep $ [ pretty h ] ++ map pretty decls) <> line
     FunBind ms -> vsep (map pretty ms) <> line
-    TypeSigDecl constraints n ty -> pretty n <+> "::" <> prettyConstraints constraints <+> pretty ty <> line
+    TypeSigDecl constraints n ty -> nest 2 $ pretty n <+> "::"
+      <+> prettyForall (concatMap constraintTypeVars constraints <> collectTypeVars ty)
+      <+> prettyConstraints constraints <+> pretty ty <> line
     ClosedTypeFamily name params matches ->
       nest 2 $ vsep
         [ "type family" <+> pretty name <+> hsep (pretty <$> params) <+> "where"
@@ -183,6 +186,22 @@ instance Pretty Decl where
           else ["|", concatWith (\a b -> a <> "," <+> b) $ pretty <$> fundeps]
         , ["where"]
         ]) : fmap prettyClassMethod methods
+
+prettyForall :: [Name] -> Doc a
+prettyForall [] = mempty
+prettyForall vars = (<> ".") $ hsep $ "forall" : fmap pretty vars
+
+constraintTypeVars :: Constraint -> [Name]
+constraintTypeVars (CClass _ ts) = concatMap collectTypeVars ts
+
+collectTypeVars :: Type -> [Name]
+collectTypeVars t = case t of
+  TyApp t1 ts -> concatMap collectTypeVars (t1 : ts)
+  TyCon n | (Char.isLower . fst <$> T.uncons n) == Just True -> [n]
+          | otherwise -> []
+  TyLam ts t1 -> concatMap collectTypeVars (t1 : ts)
+  TyTup ts -> concatMap collectTypeVars ts
+  TyAnn t1 t2 -> collectTypeVars t1 <> collectTypeVars t2
 
 prettyClassMethod :: (Name, Type) -> Doc a
 prettyClassMethod (name, t) = hsep [pretty name, "::", pretty t]
