@@ -171,7 +171,7 @@ instance Pretty Decl where
     InstDecl h decls -> (nest 2 $ vsep $ [ pretty h ] ++ map pretty decls) <> line
     FunBind ms -> vsep (map pretty ms) <> line
     TypeSigDecl constraints n ty -> nest 2 $ hsep $ concat
-        [ [pretty n , "::"]
+        [ [pretty n, "::"]
         , prettyForall (concatMap constraintTypeVars constraints <> collectTypeVars ty)
         , [prettyConstraints constraints <+> pretty ty <> line]
         ]
