@@ -93,44 +93,6 @@ loadFile inp = do
 parseFromFile' :: FilePath -> IO (Either (E.ParseErrorBundle T.Text Void) (Program SourcePos))
 parseFromFile' path = P.runParser thriftIDL path . decodeUtf8 <$> BS.readFile path
 
-apiVersionDecls :: [H.Decl]
-apiVersionDecls =
-  [ H.DataDecl "APIVersion" [] ["Basic", "WithHeaders"] []
-  , H.ClosedTypeFamily "APIReturn" ["(a :: APIVersion)", "r"]
-    [ (["'WithHeaders", "r"], H.ETuple ["r", "Pinch.Transport.HeaderData"])
-    , (["'Basic", "r"], "r")
-    ]
-  ]
-
-liftRetDecls :: [H.Decl]
-liftRetDecls = [classDecl, identInstanceDecl, tupleInstanceDecl]
-  where
-    classDecl :: H.Decl
-    classDecl = H.ClassDecl "LiftReturn" [H.TypeParamAnn "apiVersion" "APIVersion", "r", "r'"]
-      []
-      -- [ H.FunDep "apiVersion" "r"
-      -- , H.FunDep "apiVersion" "r'"
-      -- ]
-      [ ("liftReturn", H.TyLam ["r"] $ H.TyTup ["r'", "Pinch.Transport.HeaderData"])
-      ]
-
-    tupleInstanceDecl :: H.Decl
-    tupleInstanceDecl
-      = H.InstDecl (H.InstHead [] "LiftReturn" ["Basic", H.TyTup ["r", "Pinch.Transport.HeaderData"], "r"])
-      [ H.FunBind
-        [ H.Match "liftReturn" [] "Prelude.id"
-        ]
-      ]
-
-    identInstanceDecl :: H.Decl
-    identInstanceDecl
-      = H.InstDecl (H.InstHead [] "LiftReturn" ["WithHeaders", "r", "r"])
-      [ H.FunBind
-        [ H.Match "liftReturn" [] $ H.ETupleSection [Nothing, Just "Pinch.Transport.emptyHeaderData"]
-        ]
-      ]
-
-
 gProgram :: Settings -> FilePath -> Program SourcePos -> IO [H.Module]
 gProgram s inp (Program headers defs) = do
   (imports, tyMaps) <- unzip <$> traverse (gInclude s baseDir) incHeaders
@@ -171,10 +133,11 @@ gProgram s inp (Program headers defs) = do
     , -- server
       mkMod ".Server"
       ( [ impTypes
+        , H.ImportDecl (H.ModuleName "Pinch.Gen.Common") True H.IEverything
         , H.ImportDecl (H.ModuleName "Pinch.Server") True H.IEverything
         , H.ImportDecl (H.ModuleName "Pinch.Transport") True H.IEverything
         ] ++ imports ++ defaultImports)
-      (apiVersionDecls <> liftRetDecls <> concat serverDecls)
+      (concat serverDecls)
     ]
 
   where
@@ -493,11 +456,11 @@ gService :: Service SourcePos -> GenerateM ([H.Decl], [H.Decl], [H.Decl])
 gService s = do
   (nms, tys, handlers, calls, tyDecls) <- unzip5 <$> traverse gFunction (serviceFunctions s)
   let serverDecls =
-        [ H.DataDecl (serviceTyName <> "Generic") ["(apiVersion :: APIVersion)"] [ H.RecConDecl serviceConName $ zip nms tys ] []
+        [ H.DataDecl (serviceTyName <> "Generic") ["(apiVersion :: Pinch.Gen.Common.APIVersion)"] [ H.RecConDecl serviceConName $ zip nms tys ] []
         , H.TypeDecl (H.TyCon $ serviceTyName <> "'") $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'WithHeaders"]
         , H.TypeDecl (H.TyCon $ serviceTyName <> "") $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Basic"]
         , H.TypeSigDecl
-          [H.CClass "LiftReturn" ["apiVersion", "r", "r'"]]
+          [H.CClass "Pinch.Gen.Common.LiftReturn" ["apiVersion", "r", "r'"]]
           (prefix <> "_mkServer")
           $ H.TyLam [H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["apiVersion"]] (H.TyCon "Pinch.Server.ThriftServer")
         , H.FunBind
@@ -569,7 +532,7 @@ gFunction f = do
         )
       pure ((thriftResultInst : dt), H.TyCon dtNm)
 
-  let srvFunTy = H.TyLam ([H.TyCon "Pinch.Server.Context"] ++ argTys) $ H.TyApp tyIO [H.TyApp "APIReturn" ["apiVersion", retType]]
+  let srvFunTy = H.TyLam ([H.TyCon "Pinch.Server.Context"] ++ argTys) $ H.TyApp tyIO [H.TyApp "Pinch.Gen.Common.APIReturn" ["apiVersion", retType]]
   let clientFunTy = H.TyLam argTys (H.TyApp (H.TyCon "Pinch.Client.ThriftCall") [resultDataTy])
   let callSig = H.TypeSigDecl [] nm $ clientFunTy
   let call = H.FunBind
@@ -586,7 +549,7 @@ gFunction f = do
         , H.EApp (if functionOneWay f then "Pinch.Server.OnewayHandler" else "Pinch.Server.CallHandler")
           [ H.ELam [ "ctx", H.PCon argDataTyNm (map H.PVar argVars) ] (
               (if functionOneWay f then id else
-                (H.EInfix "Prelude.<$>" "liftReturn") . (H.EApp (H.ETyApp "Pinch.Internal.RPC.wrap" [ resultDataTy ]) . pure))
+                (H.EInfix "Prelude.<$>" "Pinch.Gen.Common.liftReturn") . (H.EApp (H.ETyApp "Pinch.Internal.RPC.wrap" [ resultDataTy ]) . pure))
               (H.EApp (H.EVar nm) (["server", "ctx"] ++ map H.EVar argVars))
             )
           ]
