@@ -3,7 +3,7 @@ packages: .
 source-repository-package
     type: git
     location: https://github.com/414owen/pinch.git
-    tag: 105be0fe85de488bfb29149269bc8d77b0b09054
+    tag: b61130c21fc815cbf86f194916fccf40394496e8
 
 source-repository-package
     type: git
