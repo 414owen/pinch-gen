@@ -104,6 +104,7 @@ gProgram s inp (Program headers defs) = do
         , H.PragmaLanguage "DataKinds"
         , H.PragmaLanguage "DeriveGeneric"
         , H.PragmaLanguage "FlexibleInstances"
+        , H.PragmaLanguage "FlexibleContexts"
         , H.PragmaLanguage "FunctionalDependencies"
         , H.PragmaLanguage "MultiParamTypeClasses"
         , H.PragmaLanguage "OverloadedStrings"
