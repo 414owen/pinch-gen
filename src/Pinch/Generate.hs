@@ -500,28 +500,31 @@ gFunction f = do
   argDataTy <- structDatatype argDataTyNm (A.functionParameters f)
   let catchers = map
         (\e -> H.EApp "Control.Exception.Handler"
-          [ H.EInfix "Prelude.." "Prelude.pure" (H.EVar $ dtNm <> "_" <> capitalize (fieldName e))
+          [ H.EInfix "Prelude.." "Prelude.pure" (H.EInfix "Prelude.." "Prelude.Left" (H.EVar $ dtNm <> "_" <> capitalize (fieldName e)))
           ]
         ) exceptions
   let resultField = fmap (\ty -> Field (Just 0) (Just Optional) ty "success" Nothing  [] Nothing (Pos.initialPos "")) (functionReturnType f)
   (resultDecls, resultDataTy) <- case (functionReturnType f, exceptions) of
     (Nothing, []) -> pure ([], H.TyCon $ if functionOneWay f then "()" else "Pinch.Internal.RPC.Unit")
     _ -> do
-      let thriftResultInst = H.InstDecl (H.InstHead [] "Pinch.Internal.RPC.ThriftResult" [H.TyCon dtNm])
+      let successConstructor = H.EVar $ dtNm <> "_Success"
+          thriftResultInst = H.InstDecl (H.InstHead [] "Pinch.Internal.RPC.ThriftResult" [H.TyCon dtNm])
             [ H.TypeDecl (H.TyApp (H.TyCon "ResultType") [ H.TyCon dtNm ]) retType
             , H.FunBind (
                map (\e -> H.Match "unwrap" [H.PCon (dtNm <> "_" <> capitalize (fieldName e)) [H.PVar "x"]] (H.EApp "Control.Exception.throwIO" ["x"])) exceptions
                ++ [ H.Match "unwrap" [H.PCon (dtNm <> "_Success") (const (H.PVar "x") <$> maybeToList (functionReturnType f))] (H.EApp "Prelude.pure" (maybeToList $ ("x" <$ functionReturnType f) <|> pure "()"))]
               )
-            , H.FunBind [H.Match "wrap" ["m"] (
+            , H.FunBind [H.Match "wrapThrown" ["m"] (
               ( H.EApp "Control.Exception.catches"
-                [ H.EInfix
-                    (if isNothing (functionReturnType f) then "Prelude.<$" else "Prelude.<$>")
-                    (H.EVar $ dtNm <> "_Success")
-                    "m"
+                [ H.EInfix "Prelude.<$>" "Prelude.Right" "m"
                 , H.EList catchers
                 ]
               ) ) ]
+            , H.FunBind [H.Match "wrapPure" ["a"] $
+              if isNothing (functionReturnType f)
+                then successConstructor
+                else H.EApp successConstructor ["a"]
+              ]
             ]
       dt <- unionDatatype
         dtNm
