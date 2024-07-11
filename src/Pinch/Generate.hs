@@ -460,7 +460,7 @@ gService s = do
         , H.TypeDecl (H.TyCon $ serviceTyName <> "'") $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Pinch.Gen.Common.WithHeaders"]
         , H.TypeDecl (H.TyCon $ serviceTyName <> "") $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Pinch.Gen.Common.Basic"]
         , H.TypeSigDecl
-          [H.CClass "Pinch.Gen.Common.LiftReturn" ["apiVersion", "r", "r'"]]
+          [H.CClass "Pinch.Gen.Common.LiftWrap" ["apiVersion", "r"]]
           (prefix <> "_mkServer")
           $ H.TyLam [H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["apiVersion"]] (H.TyCon "Pinch.Server.ThriftServer")
         , H.FunBind

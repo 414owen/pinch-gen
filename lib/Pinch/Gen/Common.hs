@@ -9,10 +9,12 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE DerivingStrategies    #-}
 {-# LANGUAGE LambdaCase            #-}
+{-# LANGUAGE ConstraintKinds #-}
 
 module Pinch.Gen.Common
   ( APIVersion(..)
   , APIReturn
+  , LiftWrap
   , liftWrap
   ) where
 
@@ -63,14 +65,18 @@ instance ThriftResult a => ThriftResult (a, Transport.HeaderData) where
   unwrap (a, headers) = (, headers) <$> unwrap a
 -}
 
-liftWrap :: forall (apiVersion :: APIVersion) a.
-  ( ThriftResult (a, Transport.HeaderData)
-  , ToHeadered apiVersion (APIReturn apiVersion (ResultType a)) a
+type LiftWrap apiVersion a = 
+  ( ToHeadered apiVersion (APIReturn apiVersion (ResultType a)) a
+  , ToHeadered apiVersion (APIReturn apiVersion a) a
+  , ThriftResult (APIReturn apiVersion a)
   )
+
+liftWrap
+  :: forall (apiVersion :: APIVersion) a. LiftWrap apiVersion a
   => IO (APIReturn apiVersion (ResultType a))
   -> IO (a, Transport.HeaderData)
 liftWrap act = flip fmap (wrapThrown act) $ \case
-  Left err -> err
+  Left err -> toHeadered @apiVersion (err :: APIReturn apiVersion a)
   Right a -> toHeadered @apiVersion a
 
 {-
