@@ -549,7 +549,7 @@ gFunction f = do
         , H.EApp (if functionOneWay f then "Pinch.Server.OnewayHandler" else "Pinch.Server.CallHandler")
           [ H.ELam [ "ctx", H.PCon argDataTyNm (map H.PVar argVars) ] (
               (if functionOneWay f then id else
-                H.EApp (H.ETyApp "Pinch.Gen.Common.liftWrap" [ resultDataTy ]) . pure)
+                H.EApp (H.ETyApp "Pinch.Gen.Common.liftWrap" [ "apiVersion", resultDataTy ]) . pure)
               (H.EApp (H.EVar nm) (["server", "ctx"] ++ map H.EVar argVars))
             )
           ]
