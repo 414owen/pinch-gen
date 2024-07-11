@@ -10,7 +10,7 @@
 
 module Pinch.Gen.Common
   ( APIVersion(..)
-  , APIReturn(..)
+  , APIReturn
   , LiftReturn(..)
   , liftWrap
   ) where
