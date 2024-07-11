@@ -8,13 +8,12 @@
 {-# LANGUAGE AllowAmbiguousTypes   #-}
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE DerivingStrategies    #-}
-{-# LANGUAGE TypeOperators #-}
-{-# LANGUAGE LambdaCase #-}
+{-# LANGUAGE LambdaCase            #-}
 
 module Pinch.Gen.Common
   ( APIVersion(..)
   , APIReturn
-  , liftReturn
+  , liftWrap
   ) where
 
 import qualified Pinch.Transport as Transport
@@ -64,13 +63,13 @@ instance ThriftResult a => ThriftResult (a, Transport.HeaderData) where
   unwrap (a, headers) = (, headers) <$> unwrap a
 -}
 
-liftReturn :: forall (apiVersion :: APIVersion) a.
+liftWrap :: forall (apiVersion :: APIVersion) a.
   ( ThriftResult (a, Transport.HeaderData)
   , ToHeadered apiVersion (APIReturn apiVersion (ResultType a)) a
   )
   => IO (APIReturn apiVersion (ResultType a))
   -> IO (a, Transport.HeaderData)
-liftReturn act = flip fmap (wrapThrown act) $ \case
+liftWrap act = flip fmap (wrapThrown act) $ \case
   Left err -> err
   Right a -> toHeadered @apiVersion a
 
