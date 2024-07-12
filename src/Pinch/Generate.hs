@@ -490,7 +490,7 @@ gService s = do
     serviceConName = capitalize $ serviceName s
     prefix = decapitalize $ serviceName s
     serverExports =
-      [ H.ExportType "APIVersion" H.AllConstructors
+      [ H.ExportType "Pinch.Gen.Common.APIVersion" H.AllConstructors
       , H.ExportFunction (prefix <> "_mkServer")
       , H.ExportType (serviceTyName <> "Generic") H.AllConstructors
       , H.ExportType serviceTyName H.AllConstructors
