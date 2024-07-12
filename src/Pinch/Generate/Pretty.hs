@@ -158,6 +158,7 @@ instance Pretty Module where
   pretty mod =
        vsep (map pretty $ modPragmas mod) <> line <> line
     <> "module" <+> pretty (modName mod)
+    <> line
     <> indent 2 (pretty (modExports mod) <> line <> "where")
     <> line <> line
     <> vsep (map pretty $ modImports mod) <> line <> line
@@ -165,7 +166,7 @@ instance Pretty Module where
 
 instance Pretty Exports where
   pretty (Exports Nothing) = mempty
-  pretty (Exports (Just expts)) = line <> encloseSep "(" (line <> ")") "," ((" " <>) . pretty <$> expts)
+  pretty (Exports (Just expts)) = encloseSep "(" (line <> ")") "," ((" " <>) . pretty <$> expts)
 
 instance Pretty Export where
   pretty a = case a of
