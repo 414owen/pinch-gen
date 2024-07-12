@@ -483,7 +483,7 @@ gService s = do
               )
             )
           ]
-        , H.FunBind [ H.Match (prefix <> "_mkServer") [] $ H.ETyApp (H.EVar $ prefix <> "_mkServerGeneric") [ "'Basic" ] ]
+        , H.FunBind [ H.Match (prefix <> "_mkServer") [] $ H.ETyApp (H.EVar $ prefix <> "_mkServerGeneric") [ "'Pinch.Gen.Common.Basic" ] ]
         , H.FunBind [ H.Match (prefix <> "_mkServerWithHeaders") [] $ H.ETyApp (H.EVar $ prefix <> "_mkServerGeneric") [ "'WithHeaders" ] ]
         ]
   pure (concat tyDecls, concat calls, serverDecls, serverExports)
