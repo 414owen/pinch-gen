@@ -9,7 +9,9 @@
 {-# LANGUAGE FlexibleContexts      #-}
 {-# LANGUAGE DerivingStrategies    #-}
 {-# LANGUAGE LambdaCase            #-}
-{-# LANGUAGE ConstraintKinds #-}
+{-# LANGUAGE ConstraintKinds       #-}
+
+{-# OPTIONS_GHC -Wno-orphans #-}
 
 module Pinch.Gen.Common
   ( APIVersion(..)
@@ -21,6 +23,7 @@ module Pinch.Gen.Common
 import qualified Pinch.Transport as Transport
 import Pinch.Internal.RPC (ThriftResult(..))
 import Control.Arrow (first)
+import Pinch (Pinchable (..))
 
 data APIVersion
   = Basic
@@ -52,17 +55,20 @@ instance ThriftResult r => LiftReturn 'Basic (r, Transport.HeaderData) where
 newtype PinchHeaderWrapper a = PinchHeaderWrapper (a, Transport.HeaderData)
 -}
 
-{-
 instance Pinchable a => Pinchable (a, Transport.HeaderData) where
   type Tag (a, _) = Tag a
   pinch (a, _) = pinch a
   unpinch a = (, Transport.emptyHeaderData) <$> unpinch a
 
-instance ThriftResult a => ThriftResult (a, Transport.HeaderData) where
+instance (ThriftResult a) => ThriftResult (a, Transport.HeaderData) where
   type ResultType (a, _) = (ResultType a, Transport.HeaderData)
-  wrapThrown m = wrapThrown $ fst <$> m
+  wrapThrown m = do
+    res <- wrapThrown @a m
+    pure $ case res of
+      Left a -> Left (a, Transport.emptyHeaderData)
+      Right b -> Right b
+  wrapPure (a, headers) = (wrapPure a, headers)
   unwrap (a, headers) = (, headers) <$> unwrap a
--}
 
 type LiftWrap apiVersion a = 
   ( ToHeadered apiVersion (APIReturn apiVersion (ResultType a)) (ResultType a)
