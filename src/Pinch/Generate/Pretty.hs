@@ -157,15 +157,15 @@ instance Pretty ModuleName where
 instance Pretty Module where
   pretty mod =
        vsep (map pretty $ modPragmas mod) <> line <> line
-    <> "module" <+> pretty (modName mod) <> pretty (modExports mod) <> line
-    <> "where" <> line <> line
+    <> "module" <+> pretty (modName mod)
+    <> indent 2 (pretty (modExports mod) <> line <> "where")
+    <> line <> line
     <> vsep (map pretty $ modImports mod) <> line <> line
     <> vsep (map pretty $ modDecls mod)
 
 instance Pretty Exports where
   pretty (Exports Nothing) = mempty
-  pretty (Exports (Just expts)) = line
-    <> indent 2 (encloseSep "(" (line <> ")") "," ((" " <>) . pretty <$> expts))
+  pretty (Exports (Just expts)) = line <> encloseSep "(" (line <> ")") "," ((" " <>) . pretty <$> expts)
 
 instance Pretty Export where
   pretty a = case a of
