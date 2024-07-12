@@ -467,10 +467,10 @@ gService s = do
         , H.TypeSigDecl
           (nub constraints)
           -- [H.CClass "Pinch.Gen.Common.LiftWrap" ["apiVersion", "r"]]
-          (prefix <> "_mkServer")
+          (prefix <> "_mkServerGeneric")
           $ H.TyLam [H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["apiVersion"]] (H.TyCon "Pinch.Server.ThriftServer")
         , H.FunBind
-          [ H.Match (prefix <> "_mkServer") [H.PVar "server"]
+          [ H.Match (prefix <> "_mkServerGeneric") [H.PVar "server"]
             ( H.ELet "functions"
               (H.EApp "Data.HashMap.Strict.fromList" [ H.EList handlers ] )
               ( H.EApp "Pinch.Server.createServer"
@@ -483,6 +483,8 @@ gService s = do
               )
             )
           ]
+        , H.FunBind [ H.Match (prefix <> "_mkServer") [] $ H.ETyApp (H.EVar $ prefix <> "_mkServerGeneric") [ "'Basic" ] ]
+        , H.FunBind [ H.Match (prefix <> "_mkServerWithHeaders") [] $ H.ETyApp (H.EVar $ prefix <> "_mkServerGeneric") [ "'WithHeaders" ] ]
         ]
   pure (concat tyDecls, concat calls, serverDecls, serverExports)
   where
@@ -492,9 +494,8 @@ gService s = do
     serverExports =
       [ H.ExportType "Pinch.Gen.Common.APIVersion" H.AllConstructors
       , H.ExportFunction (prefix <> "_mkServer")
+      , H.ExportFunction (prefix <> "_mkServerWithHeaders")
       , H.ExportType (serviceTyName <> "Generic") H.AllConstructors
-      , H.ExportType serviceTyName H.AllConstructors
-      , H.ExportType (serviceTyName <> "'") H.AllConstructors
       ]
 
 gFieldType :: Field SourcePos -> GenerateM (Bool, H.Type)
