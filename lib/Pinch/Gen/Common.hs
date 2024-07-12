@@ -72,7 +72,12 @@ type LiftWrap apiVersion a =
   )
 
 liftWrap
-  :: forall (apiVersion :: APIVersion) a. (LiftWrap apiVersion a)
+  :: forall (apiVersion :: APIVersion) a.
+  ( ToHeadered apiVersion (APIReturn apiVersion (ResultType a)) (ResultType a)
+  , ToHeadered apiVersion (APIReturn apiVersion a) a
+  , ThriftResult (APIReturn apiVersion a)
+  , ThriftResult a
+  )
   => IO (APIReturn apiVersion (ResultType a))
   -> IO (a, Transport.HeaderData)
 liftWrap act = flip fmap (wrapThrown act) $ \case
