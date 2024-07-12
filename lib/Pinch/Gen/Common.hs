@@ -27,8 +27,8 @@ data APIVersion
   | WithHeaders
 
 type family APIReturn (a :: APIVersion) r where
-  APIReturn 'WithHeaders r = (ResultType r, Transport.HeaderData)
-  APIReturn 'Basic r = ResultType r
+  APIReturn 'WithHeaders r = (r, Transport.HeaderData)
+  APIReturn 'Basic r = r
 
 class ToHeadered (apiVersion :: APIVersion) a b where
   toHeadered :: a -> (b, Transport.HeaderData)
