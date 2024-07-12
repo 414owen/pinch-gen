@@ -493,7 +493,6 @@ gService s = do
       [ H.ExportType "APIVersion" H.AllConstructors
       , H.ExportFunction (prefix <> "_mkServer")
       , H.ExportType (serviceTyName <> "Generic") H.AllConstructors
-      , H.ExportType (serviceTyName <> "Generic") H.AllConstructors
       , H.ExportType serviceTyName H.AllConstructors
       , H.ExportType (serviceTyName <> "'") H.AllConstructors
       ]
