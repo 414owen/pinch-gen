@@ -455,13 +455,14 @@ gField prefix (i, f) = do
 
 gService :: Service SourcePos -> GenerateM ([H.Decl], [H.Decl], [H.Decl])
 gService s = do
-  (nms, tys, handlers, calls, tyDecls) <- unzip5 <$> traverse gFunction (serviceFunctions s)
+  (nms, tys, constraints, handlers, calls, tyDecls) <- unzip6 <$> traverse gFunction (serviceFunctions s)
   let serverDecls =
         [ H.DataDecl (serviceTyName <> "Generic") ["(apiVersion :: Pinch.Gen.Common.APIVersion)"] [ H.RecConDecl serviceConName $ zip nms tys ] []
         , H.TypeDecl (H.TyCon $ serviceTyName <> "'") $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Pinch.Gen.Common.WithHeaders"]
         , H.TypeDecl (H.TyCon $ serviceTyName <> "") $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Pinch.Gen.Common.Basic"]
         , H.TypeSigDecl
-          [H.CClass "Pinch.Gen.Common.LiftWrap" ["apiVersion", "r"]]
+          constraints
+          -- [H.CClass "Pinch.Gen.Common.LiftWrap" ["apiVersion", "r"]]
           (prefix <> "_mkServer")
           $ H.TyLam [H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["apiVersion"]] (H.TyCon "Pinch.Server.ThriftServer")
         , H.FunBind
@@ -492,7 +493,7 @@ gFieldType f = do
     Just Optional -> pure (False, H.TyApp (H.TyCon $ "Prelude.Maybe") [ ty ])
     _ -> pure (True, ty)
 
-gFunction :: Function SourcePos -> GenerateM (H.Name, H.Type, H.Exp, [H.Decl], [H.Decl])
+gFunction :: Function SourcePos -> GenerateM (H.Name, H.Type, H.Constraint, H.Exp, [H.Decl], [H.Decl])
 gFunction f = do
   argTys <- traverse (fmap snd . gFieldType) (A.functionParameters f)
   retType <- maybe (pure tyUnit) gTypeReference (functionReturnType f)
@@ -559,7 +560,9 @@ gFunction f = do
           ]
         ]
 
-  pure ( nm, srvFunTy, handler, [callSig, call], (argDataTy ++ resultDecls))
+  let constraint = H.CClass "Pinch.Gen.Common.LiftWrap" ["apiVersion", H.TyCon dtNm]
+
+  pure ( nm, srvFunTy, constraint, handler, [callSig, call], (argDataTy ++ resultDecls))
   where
     nm = decapitalize $ functionName f
     dtNm = capitalize (functionName f) <> "_Result"
