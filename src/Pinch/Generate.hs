@@ -98,13 +98,14 @@ gProgram s inp (Program headers defs) = do
   (imports, tyMaps) <- unzip <$> traverse (gInclude s baseDir) incHeaders
 
   let tyMap = Map.unions tyMaps
-  let (typeDecls, clientDecls, serverDecls) = unzip3 $ runReader (traverse gDefinition defs) $ Context tyMap s
-  let mkMod suffix = H.Module (H.ModuleName $ modBaseName <> suffix)
+  let (typeDecls, clientDecls, serverDecls, serverExports) = unzip4 $ runReader (traverse gDefinition defs) $ Context tyMap s
+  let mkMod suffix exports = H.Module (H.ModuleName $ modBaseName <> suffix)
+        exports
         [ H.PragmaLanguage "AllowAmbiguousTypes"
         , H.PragmaLanguage "DataKinds"
         , H.PragmaLanguage "DeriveGeneric"
-        , H.PragmaLanguage "FlexibleInstances"
         , H.PragmaLanguage "FlexibleContexts"
+        , H.PragmaLanguage "FlexibleInstances"
         , H.PragmaLanguage "FunctionalDependencies"
         , H.PragmaLanguage "MultiParamTypeClasses"
         , H.PragmaLanguage "OverloadedStrings"
@@ -118,6 +119,7 @@ gProgram s inp (Program headers defs) = do
   pure $
     [ -- types
       mkMod ".Types"
+      (H.Exports Nothing)
       (imports ++ defaultImports ++ map
         (\n -> H.ImportDecl (H.ModuleName n) True H.IEverything)
         (sExtraImports s ++ (if sGenerateArbitrary s then [ "Test.QuickCheck" ] else [])
@@ -126,6 +128,7 @@ gProgram s inp (Program headers defs) = do
       (concat typeDecls)
     , -- client
       mkMod ".Client"
+      (H.Exports Nothing)
       ( [ impTypes
         , H.ImportDecl (H.ModuleName "Pinch.Client") True H.IEverything
         , H.ImportDecl (H.ModuleName "Pinch.Transport") True H.IEverything
@@ -133,6 +136,7 @@ gProgram s inp (Program headers defs) = do
       (concat clientDecls)
     , -- server
       mkMod ".Server"
+      (H.Exports $ Just $ concat serverExports)
       ( [ impTypes
         , H.ImportDecl (H.ModuleName "Pinch.Gen.Common") True H.IEverything
         , H.ImportDecl (H.ModuleName "Pinch.Server") True H.IEverything
@@ -185,10 +189,10 @@ gInclude s dir i = do
   let thriftModName = T.pack $ dropExtension $ T.unpack $ includePath i
   pure (H.ImportDecl modName True H.IEverything, Map.singleton thriftModName modName)
 
-gDefinition :: Definition SourcePos -> GenerateM ([H.Decl], [H.Decl], [H.Decl])
+gDefinition :: Definition SourcePos -> GenerateM ([H.Decl], [H.Decl], [H.Decl], [H.Export])
 gDefinition def = case def of
-  ConstDefinition c -> (\x -> (x, [], [])) <$> gConst c
-  TypeDefinition ty -> (\x -> (x, [], [])) <$> gType ty
+  ConstDefinition c -> (\x -> (x, [], [], [])) <$> gConst c
+  TypeDefinition ty -> (\x -> (x, [], [], [])) <$> gType ty
   ServiceDefinition s -> gService s
 
 gConst :: A.Const SourcePos -> GenerateM [H.Decl]
@@ -453,13 +457,13 @@ gField prefix (i, f) = do
   pure (index, prefix <> "_" <> fieldName f, ty, req)
 
 
-gService :: Service SourcePos -> GenerateM ([H.Decl], [H.Decl], [H.Decl])
+gService :: Service SourcePos -> GenerateM ([H.Decl], [H.Decl], [H.Decl], [H.Export])
 gService s = do
   (nms, tys, constraints, handlers, calls, tyDecls) <- unzip6 <$> traverse gFunction (serviceFunctions s)
   let serverDecls =
         [ H.DataDecl (serviceTyName <> "Generic") ["(apiVersion :: Pinch.Gen.Common.APIVersion)"] [ H.RecConDecl serviceConName $ zip nms tys ] []
         , H.TypeDecl (H.TyCon $ serviceTyName <> "'") $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Pinch.Gen.Common.WithHeaders"]
-        , H.TypeDecl (H.TyCon $ serviceTyName <> "") $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Pinch.Gen.Common.Basic"]
+        , H.TypeDecl (H.TyCon serviceTyName) $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Pinch.Gen.Common.Basic"]
         , H.TypeSigDecl
           (nub constraints)
           -- [H.CClass "Pinch.Gen.Common.LiftWrap" ["apiVersion", "r"]]
@@ -480,11 +484,19 @@ gService s = do
             )
           ]
         ]
-  pure (concat tyDecls, concat calls, serverDecls)
+  pure (concat tyDecls, concat calls, serverDecls, serverExports)
   where
     serviceTyName = capitalize $ serviceName s
     serviceConName = capitalize $ serviceName s
     prefix = decapitalize $ serviceName s
+    serverExports =
+      [ H.ExportType "APIVersion" H.AllConstructors
+      , H.ExportFunction (prefix <> "_mkServer")
+      , H.ExportType (serviceTyName <> "Generic") H.AllConstructors
+      , H.ExportType (serviceTyName <> "Generic") H.AllConstructors
+      , H.ExportType serviceTyName H.AllConstructors
+      , H.ExportType (serviceTyName <> "'") H.AllConstructors
+      ]
 
 gFieldType :: Field SourcePos -> GenerateM (Bool, H.Type)
 gFieldType f = do

@@ -18,6 +18,7 @@ type ClassName = T.Text
 
 data Module = Module
   { modName    :: ModuleName
+  , modExports :: Exports
   , modPragmas :: [Pragma]
   , modImports :: [ImportDecl]
   , modDecls   :: [Decl]
@@ -28,6 +29,20 @@ data Pragma
   = PragmaLanguage T.Text
   | PragmaOptsGhc T.Text
   deriving (Show)
+
+data ExportDataConstructors
+  = NoConstructors
+  | Constructors [Name]
+  | AllConstructors
+  deriving Show
+
+data Export
+  = ExportType Name ExportDataConstructors
+  | ExportFunction Name
+  deriving Show
+
+newtype Exports = Exports (Maybe [Export])
+  deriving Show
 
 data ImportDecl = ImportDecl
   { iName      :: ModuleName
@@ -142,9 +157,24 @@ instance Pretty ModuleName where
 instance Pretty Module where
   pretty mod =
        vsep (map pretty $ modPragmas mod) <> line <> line
-    <> "module" <+> pretty (modName mod) <+> "where" <> line <> line
+    <> "module" <+> pretty (modName mod) <> pretty (modExports mod) <> line
+    <> "where" <> line <> line
     <> vsep (map pretty $ modImports mod) <> line <> line
     <> vsep (map pretty $ modDecls mod)
+
+instance Pretty Exports where
+  pretty (Exports Nothing) = mempty
+  pretty (Exports (Just expts)) = line
+    <> indent 2 (encloseSep "(" (line <> ")") "," ((" " <>) . pretty <$> expts))
+
+instance Pretty Export where
+  pretty a = case a of
+    ExportType name constructors -> pretty name <> case constructors of
+      NoConstructors -> mempty
+      Constructors constructors' -> tupled $ pretty <$> constructors'
+      AllConstructors -> "(..)"
+    ExportFunction name -> pretty name
+
 
 instance Pretty Pragma where
   pretty p = case p of
