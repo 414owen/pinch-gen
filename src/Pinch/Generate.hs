@@ -560,8 +560,7 @@ gFunction f = do
           ]
         ]
 
-  let constraint = H.CClass "Pinch.Gen.Common.LiftWrap"
-        ["apiVersion", if functionOneWay f then "Pinch.Internal.RPC.Unit" else H.TyCon dtNm]
+  let constraint = H.CClass "Pinch.Gen.Common.LiftWrap" ["apiVersion", resultDataTy]
 
   pure ( nm, srvFunTy, constraint, handler, [callSig, call], (argDataTy ++ resultDecls))
   where
