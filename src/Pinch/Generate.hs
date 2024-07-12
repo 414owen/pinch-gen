@@ -461,7 +461,7 @@ gService s = do
         , H.TypeDecl (H.TyCon $ serviceTyName <> "'") $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Pinch.Gen.Common.WithHeaders"]
         , H.TypeDecl (H.TyCon $ serviceTyName <> "") $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Pinch.Gen.Common.Basic"]
         , H.TypeSigDecl
-          constraints
+          (nub constraints)
           -- [H.CClass "Pinch.Gen.Common.LiftWrap" ["apiVersion", "r"]]
           (prefix <> "_mkServer")
           $ H.TyLam [H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["apiVersion"]] (H.TyCon "Pinch.Server.ThriftServer")
@@ -560,7 +560,8 @@ gFunction f = do
           ]
         ]
 
-  let constraint = H.CClass "Pinch.Gen.Common.LiftWrap" ["apiVersion", H.TyCon dtNm]
+  let constraint = H.CClass "Pinch.Gen.Common.LiftWrap"
+        ["apiVersion", if functionOneWay f then "Pinch.Internal.RPC.Unit" else H.TyCon dtNm]
 
   pure ( nm, srvFunTy, constraint, handler, [callSig, call], (argDataTy ++ resultDecls))
   where

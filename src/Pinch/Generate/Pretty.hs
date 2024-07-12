@@ -84,7 +84,7 @@ data Type
   | TyLam [Type] Type
   | TyTup [Type]
   | TyAnn Type Type
-  deriving (Show)
+  deriving (Eq, Show)
 
 instance IsString Type where
   fromString = TyCon . T.pack
@@ -95,7 +95,7 @@ data InstHead
 
 data Constraint
   = CClass ClassName [Type]
-  deriving (Show)
+  deriving (Eq, Show)
 
 data Match = Match Name [Pat] Exp
   deriving (Show)
