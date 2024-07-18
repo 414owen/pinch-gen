@@ -204,7 +204,8 @@ instance Pretty Decl where
     TypeSigDecl constraints n ty -> nest 2 $ hsep $ concat
         [ [pretty n, "::"]
         , prettyForall (concatMap constraintTypeVars constraints <> collectTypeVars ty)
-        , [prettyConstraints constraints <+> pretty ty]
+        , prettyConstraints constraints
+        , [pretty ty]
         ]
     ClosedTypeFamily name params matches ->
       nest 2 $ vsep
@@ -267,13 +268,13 @@ instance Pretty ConDecl where
           <> "}"
 
 instance Pretty InstHead where
-  pretty (InstHead cs n ty) = "instance" <> prettyConstraints cs <+> pretty n <+> hsep (pretty <$> ty) <+> "where"
+  pretty (InstHead cs n ty) = hsep $ concat [["instance"], prettyConstraints cs, [pretty n], pretty <$> ty, ["where"]]
 
-prettyConstraints :: [Constraint] -> Doc ann
+prettyConstraints :: [Constraint] -> [Doc ann]
 prettyConstraints cs =
   if null cs
-  then ""
-  else space <> parens (cList $ map pretty cs) <+> "=>"
+  then []
+  else [parens (cList $ map pretty cs) <+> "=>"]
 
 instance Pretty Constraint where
   pretty (CClass cl []) = pretty cl
