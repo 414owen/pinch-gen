@@ -479,7 +479,7 @@ gService s = do
         , H.TypeDecl (H.TyCon $ serviceTyName <> "'") $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Pinch.Gen.Common.WithHeaders"]
         , H.TypeDecl (H.TyCon serviceTyName) $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Pinch.Gen.Common.Basic"]
         , H.TypeSigDecl
-            []
+            (nub constraints)
             ("functions_" <> serviceConName)
             ( H.TyLam 
                 [H.TyCon serviceConName] 
