@@ -6,9 +6,9 @@ module Pinch.Generate where
 import           Control.Applicative
 import           Control.Exception
 import           Control.Monad.Reader
+import           Control.Monad                        (forM_)
 import qualified Data.ByteString                       as BS
 import           Data.Char
-import           Data.Foldable                         (forM_)
 import qualified Data.HashMap.Strict                   as Map
 import           Data.List
 import           Data.Maybe
@@ -98,7 +98,7 @@ gProgram s inp (Program headers defs) = do
   (imports, tyMaps) <- unzip <$> traverse (gInclude s baseDir) incHeaders
 
   let tyMap = Map.unions tyMaps
-  let (typeDecls, clientDecls, serverDecls, serverExports) = unzip4 $ runReader (traverse gDefinition defs) $ Context tyMap s
+  let (typeDecls, clientDecls, serverDecls, serverImports, serverExports) = unzip5 $ runReader (traverse gDefinition defs) $ Context tyMap s headers
   let mkMod suffix exports = H.Module (H.ModuleName $ modBaseName <> suffix)
         exports
         [ H.PragmaLanguage "AllowAmbiguousTypes"
@@ -141,7 +141,7 @@ gProgram s inp (Program headers defs) = do
         , H.ImportDecl (H.ModuleName "Pinch.Gen.Common") True H.IEverything
         , H.ImportDecl (H.ModuleName "Pinch.Server") True H.IEverything
         , H.ImportDecl (H.ModuleName "Pinch.Transport") True H.IEverything
-        ] ++ imports ++ defaultImports)
+        ] ++ imports ++ concat serverImports ++ defaultImports)
       (concat serverDecls)
     ]
 
@@ -158,7 +158,6 @@ gProgram s inp (Program headers defs) = do
       , H.ImportDecl (H.ModuleName "Control.Applicative") True H.IEverything
       , H.ImportDecl (H.ModuleName "Control.Exception") True H.IEverything
       , H.ImportDecl (H.ModuleName "Pinch") True H.IEverything
-      , H.ImportDecl (H.ModuleName "Pinch.Server") True H.IEverything
       , H.ImportDecl (H.ModuleName "Pinch.Internal.RPC") True H.IEverything
       , H.ImportDecl (H.ModuleName "Data.Text") True H.IEverything
       , H.ImportDecl (H.ModuleName "Data.ByteString") True H.IEverything
@@ -177,6 +176,7 @@ data Context
   = Context
   { cModuleMap :: ModuleMap
   , cSettings  :: Settings
+  , cHeaders   :: [Header SourcePos]  
   }
 
 type GenerateM = Reader Context
@@ -189,10 +189,10 @@ gInclude s dir i = do
   let thriftModName = T.pack $ dropExtension $ T.unpack $ includePath i
   pure (H.ImportDecl modName True H.IEverything, Map.singleton thriftModName modName)
 
-gDefinition :: Definition SourcePos -> GenerateM ([H.Decl], [H.Decl], [H.Decl], [H.Export])
+gDefinition :: Definition SourcePos -> GenerateM ([H.Decl], [H.Decl], [H.Decl], [H.ImportDecl], [H.Export])
 gDefinition def = case def of
-  ConstDefinition c -> (\x -> (x, [], [], [])) <$> gConst c
-  TypeDefinition ty -> (\x -> (x, [], [], [])) <$> gType ty
+  ConstDefinition c -> (\x -> (x, [], [], [], [])) <$> gConst c
+  TypeDefinition ty -> (\x -> (x, [], [], [], [])) <$> gType ty
   ServiceDefinition s -> gService s
 
 gConst :: A.Const SourcePos -> GenerateM [H.Decl]
@@ -457,36 +457,59 @@ gField prefix (i, f) = do
   pure (index, prefix <> "_" <> fieldName f, ty, req)
 
 
-gService :: Service SourcePos -> GenerateM ([H.Decl], [H.Decl], [H.Decl], [H.Export])
+gService :: Service SourcePos -> GenerateM ([H.Decl], [H.Decl], [H.Decl], [H.ImportDecl], [H.Export])
 gService s = do
+  headers <- asks cHeaders
+  settings <- asks cSettings
   (nms, tys, constraints, handlers, calls, tyDecls) <- unzip6 <$> traverse gFunction (serviceFunctions s)
+
+  let (additionalImports, baseService, baseFunction) = case serviceExtends s of
+        Just baseServiceIdentifier -> do
+          case T.splitOn "." baseServiceIdentifier of
+            [importSource, baseServiceName] -> do
+              let importModule = (getModuleName settings headers $ T.unpack importSource) <> ".Server"
+              ([importModule], [("baseServer", H.TyCon $ importModule <> "." <> baseServiceName)], ".functions_" <> baseServiceName)
+            _ -> ([], [], "")
+        Nothing -> ([], [], "")
+  let extensionFunction = case additionalImports of
+        [] -> ""
+        imports -> head imports <> baseFunction <> " (baseServer server) `Data.HashMap.Strict.union` " 
   let serverDecls =
-        [ H.DataDecl (serviceTyName <> "Generic") ["(apiVersion :: Pinch.Gen.Common.APIVersion)"] [ H.RecConDecl serviceConName $ zip nms tys ] []
+        [ H.DataDecl (serviceTyName <> "Generic") ["(apiVersion :: Pinch.Gen.Common.APIVersion)"] [ H.RecConDecl serviceConName $ baseService <> zip nms tys ] []
         , H.TypeDecl (H.TyCon $ serviceTyName <> "'") $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Pinch.Gen.Common.WithHeaders"]
         , H.TypeDecl (H.TyCon serviceTyName) $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Pinch.Gen.Common.Basic"]
         , H.TypeSigDecl
+            []
+            ("functions_" <> serviceConName)
+            ( H.TyLam 
+                [H.TyCon serviceConName] 
+                (H.TyCon "Data.HashMap.Strict.HashMap Data.Text.Text Pinch.Server.Handler")
+            )
+        , H.FunBind
+          [ H.Match ("functions_" <> serviceConName) [H.PVar "server"]
+            ( H.EApp (H.EVar (extensionFunction <> "Data.HashMap.Strict.fromList")) [ H.EList handlers ] )
+          ]
+        , H.TypeSigDecl
           (nub constraints)
-          -- [H.CClass "Pinch.Gen.Common.LiftWrap" ["apiVersion", "r"]]
           (prefix <> "_mkServerGeneric")
           $ H.TyLam [H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["apiVersion"]] (H.TyCon "Pinch.Server.ThriftServer")
         , H.FunBind
           [ H.Match (prefix <> "_mkServerGeneric") [H.PVar "server"]
-            ( H.ELet "functions"
-              (H.EApp "Data.HashMap.Strict.fromList" [ H.EList handlers ] )
-              ( H.EApp "Pinch.Server.createServer"
-                [ (H.ELam ["nm"]
-                    (H.EApp "Data.HashMap.Strict.lookup"
-                      [ "nm", "functions" ]
-                    )
+            ( H.EApp "Pinch.Server.createServer"
+              [ (H.ELam ["nm"]
+                  (H.EApp "Data.HashMap.Strict.lookup"
+                    [ "nm", H.EVar $ "functions_" <> serviceConName <> " server" ]
                   )
-                ]
-              )
+                )
+              ]
             )
           ]
         , H.FunBind [ H.Match (prefix <> "_mkServer") [] $ H.ETyApp (H.EVar $ prefix <> "_mkServerGeneric") [ "'Pinch.Gen.Common.Basic" ] ]
         , H.FunBind [ H.Match (prefix <> "_mkServerWithHeaders") [] $ H.ETyApp (H.EVar $ prefix <> "_mkServerGeneric") [ "'Pinch.Gen.Common.WithHeaders" ] ]
         ]
-  pure (concat tyDecls, concat calls, serverDecls, serverExports)
+  let serverImports = (\imp -> H.ImportDecl (H.ModuleName imp) True H.IEverything) <$> additionalImports
+  pure (concat tyDecls, concat calls, serverDecls, serverImports, serverExports)
+
   where
     serviceTyName = capitalize $ serviceName s
     serviceConName = capitalize $ serviceName s
@@ -549,8 +572,9 @@ gFunction f = do
           Nothing -> SRCVoid "_Success"
           _ -> SRCNone
         )
-      pure ((thriftResultInst : dt), H.TyCon dtNm)
+      pure (thriftResultInst : dt, H.TyCon dtNm)
 
+  let constraint = H.CClass "Pinch.Gen.Common.LiftWrap" ["apiVersion", resultDataTy]
   let srvFunTy = H.TyLam ([H.TyCon "Pinch.Server.Context"] ++ argTys) $ H.TyApp tyIO [H.TyApp "Pinch.Gen.Common.APIReturn" ["apiVersion", retType]]
   let clientFunTy = H.TyLam argTys (H.TyApp (H.TyCon "Pinch.Client.ThriftCall") [resultDataTy])
   let callSig = H.TypeSigDecl [] nm $ clientFunTy
@@ -573,8 +597,6 @@ gFunction f = do
             )
           ]
         ]
-
-  let constraint = H.CClass "Pinch.Gen.Common.LiftWrap" ["apiVersion", resultDataTy]
 
   pure ( nm, srvFunTy, constraint, handler, [callSig, call], (argDataTy ++ resultDecls))
   where
