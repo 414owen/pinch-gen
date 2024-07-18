@@ -530,8 +530,9 @@ gService s = do
       [ H.ExportType "Pinch.Gen.Common.APIVersion" H.AllConstructors
       , H.ExportType serviceTyName H.NoConstructors
       , H.ExportType (serviceTyName <> "'") H.NoConstructors
-      , H.ExportFunction (prefix <> "_mkServer")
-      , H.ExportFunction (prefix <> "_mkServerWithHeaders")
+      , H.ExportFunction $ "functions_" <> serviceConName
+      , H.ExportFunction $ prefix <> "_mkServer"
+      , H.ExportFunction $ prefix <> "_mkServerWithHeaders"
       , H.ExportType (serviceTyName <> "Generic") H.AllConstructors
       ]
 
