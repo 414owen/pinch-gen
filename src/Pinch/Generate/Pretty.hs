@@ -204,7 +204,7 @@ instance Pretty Decl where
     TypeSigDecl constraints n ty -> nest 2 $ hsep $ concat
         [ [pretty n, "::"]
         , prettyForall (concatMap constraintTypeVars constraints <> collectTypeVars ty)
-        , [prettyConstraints constraints <+> pretty ty <> line]
+        , [prettyConstraints constraints <+> pretty ty]
         ]
     ClosedTypeFamily name params matches ->
       nest 2 $ vsep
