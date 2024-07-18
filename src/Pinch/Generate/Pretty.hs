@@ -192,7 +192,7 @@ instance Pretty ImportNames where
 
 instance Pretty Decl where
   pretty decl = case decl of
-    TypeDecl t1 t2 -> "type" <+> pretty t1 <+> "=" <+> pretty t2 <> line
+    TypeDecl t1 t2 -> hsep (["type", pretty t1] <> (pretty <$> collectTypeVars t2) <> ["="]) <> softline <> pretty t2 <> line
     DataDecl t typarams [] ds -> "data" <+> pretty t <+> hsep (pretty <$> typarams) <+> prettyDerivings ds <> line
     DataDecl t typarams (c:cs) ds -> nest 2 (vsep $
         [ "data" <+> pretty t <+> hsep (pretty <$> typarams)
