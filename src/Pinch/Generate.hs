@@ -102,6 +102,7 @@ gProgram s inp (Program headers defs) = do
   let mkMod suffix exports = H.Module (H.ModuleName $ modBaseName <> suffix)
         exports
         [ H.PragmaLanguage "AllowAmbiguousTypes"
+        , H.PragmaLanguage "ConstraintKinds"
         , H.PragmaLanguage "DataKinds"
         , H.PragmaLanguage "DeriveGeneric"
         , H.PragmaLanguage "FlexibleContexts"
@@ -456,6 +457,13 @@ gField prefix (i, f) = do
   let index = fromMaybe i (fieldIdentifier f)
   pure (index, prefix <> "_" <> fieldName f, ty, req)
 
+constraintsToType :: [H.Constraint] -> H.Type
+constraintsToType [] = H.TyTup []
+constraintsToType [c] = constraintToType c
+constraintsToType cs = H.TyTup $ constraintToType <$> cs
+
+constraintToType :: H.Constraint -> H.Type
+constraintToType (H.CClass name params) = H.TyApp (H.TyCon name) params
 
 gService :: Service SourcePos -> GenerateM ([H.Decl], [H.Decl], [H.Decl], [H.ImportDecl], [H.Export])
 gService s = do
@@ -476,10 +484,11 @@ gService s = do
         imports -> head imports <> baseFunction <> " (baseServer server) `Data.HashMap.Strict.union` " 
   let serverDecls =
         [ H.DataDecl (serviceTyName <> "Generic") ["(apiVersion :: Pinch.Gen.Common.APIVersion)"] [ H.RecConDecl serviceConName $ baseService <> zip nms tys ] []
+        , H.TypeDecl (H.TyCon $ constraintsName) $  constraintsToType $ nub constraints
         , H.TypeDecl (H.TyCon $ serviceTyName <> "'") $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Pinch.Gen.Common.WithHeaders"]
         , H.TypeDecl (H.TyCon serviceTyName) $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Pinch.Gen.Common.Basic"]
         , H.TypeSigDecl
-            (nub constraints)
+            [H.CClass constraintsName ["apiVersion"]]
             ("functions_" <> serviceConName)
             ( H.TyLam 
                 [H.TyCon serviceConName] 
@@ -490,7 +499,7 @@ gService s = do
             ( H.EApp (H.EVar (extensionFunction <> "Data.HashMap.Strict.fromList")) [ H.EList handlers ] )
           ]
         , H.TypeSigDecl
-          (nub constraints)
+          [H.CClass constraintsName ["apiVersion"]]
           (prefix <> "_mkServerGeneric")
           $ H.TyLam [H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["apiVersion"]] (H.TyCon "Pinch.Server.ThriftServer")
         , H.FunBind
@@ -514,6 +523,7 @@ gService s = do
     serviceTyName = capitalize $ serviceName s
     serviceConName = capitalize $ serviceName s
     prefix = decapitalize $ serviceName s
+    constraintsName = serviceTyName <> "Constraints"
     serverExports =
       [ H.ExportType "Pinch.Gen.Common.APIVersion" H.AllConstructors
       , H.ExportType serviceTyName H.NoConstructors
