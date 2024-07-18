@@ -483,15 +483,15 @@ gService s = do
         [] -> ""
         imports -> head imports <> baseFunction <> " (baseServer server) `Data.HashMap.Strict.union` " 
   let serverDecls =
-        [ H.DataDecl (serviceTyName <> "Generic") ["(apiVersion :: Pinch.Gen.Common.APIVersion)"] [ H.RecConDecl serviceConName $ baseService <> zip nms tys ] []
+        [ H.DataDecl genericName ["(apiVersion :: Pinch.Gen.Common.APIVersion)"] [ H.RecConDecl serviceConName $ baseService <> zip nms tys ] []
         , H.TypeDecl (H.TyCon $ constraintsName) $  constraintsToType $ nub constraints
-        , H.TypeDecl (H.TyCon $ serviceTyName <> "'") $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Pinch.Gen.Common.WithHeaders"]
+        , H.TypeDecl (H.TyCon $ serviceTyName <> "'") $ H.TyApp (H.TyCon $ genericName) ["'Pinch.Gen.Common.WithHeaders"]
         , H.TypeDecl (H.TyCon serviceTyName) $ H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["'Pinch.Gen.Common.Basic"]
         , H.TypeSigDecl
             [H.CClass constraintsName ["apiVersion"]]
             ("functions_" <> serviceConName)
             ( H.TyLam 
-                [H.TyCon serviceConName] 
+                [genericVersioned] 
                 (H.TyCon "Data.HashMap.Strict.HashMap Data.Text.Text Pinch.Server.Handler")
             )
         , H.FunBind
@@ -501,7 +501,7 @@ gService s = do
         , H.TypeSigDecl
           [H.CClass constraintsName ["apiVersion"]]
           (prefix <> "_mkServerGeneric")
-          $ H.TyLam [H.TyApp (H.TyCon $ serviceTyName <> "Generic") ["apiVersion"]] (H.TyCon "Pinch.Server.ThriftServer")
+          $ H.TyLam [genericVersioned] (H.TyCon "Pinch.Server.ThriftServer")
         , H.FunBind
           [ H.Match (prefix <> "_mkServerGeneric") [H.PVar "server"]
             ( H.EApp "Pinch.Server.createServer"
@@ -524,6 +524,8 @@ gService s = do
     serviceConName = capitalize $ serviceName s
     prefix = decapitalize $ serviceName s
     constraintsName = serviceTyName <> "Constraints"
+    genericName = serviceTyName <> "Generic"
+    genericVersioned = H.TyApp (H.TyCon genericName) ["apiVersion"]
     serverExports =
       [ H.ExportType "Pinch.Gen.Common.APIVersion" H.AllConstructors
       , H.ExportType serviceTyName H.NoConstructors
